@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JobHuntAI — Live Real-Time Job Search & Career Assistant</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header / Navigation -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="logo-icon">💼</div>
+        <div class="brand-text">
+          <h1>JobHunt<span class="gradient-text">AI</span></h1>
+          <p class="tagline">Live Job Aggregator & AI Career Coach</p>
+        </div>
+      </div>
+
+      <nav class="main-nav">
+        <button class="nav-btn active" data-tab="jobs-tab">
+          <span class="icon">🔍</span> Live Job Search
+        </button>
+        <button class="nav-btn" data-tab="tracker-tab">
+          <span class="icon">⭐</span> My Saved Jobs & Tracker
+          <span class="badge" id="nav-saved-count">0</span>
+        </button>
+        <button class="nav-btn" data-tab="cover-letter-tab">
+          <span class="icon">✍️</span> Cover Letter Studio
+        </button>
+        <button class="nav-btn" data-tab="interview-tab">
+          <span class="icon">🎯</span> Interview Prep Coach
+        </button>
+        <button class="nav-btn" data-tab="profile-tab">
+          <span class="icon">👤</span> My Profile
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="main-container">
+
+    <!-- ==================== TAB 1: LIVE JOB SEARCH ==================== -->
+    <section id="jobs-tab" class="tab-pane active">
+      <!-- Search & Filter Hero -->
+      <div class="hero-search-box">
+        <form id="live-search-form" class="search-bar-wrap">
+          <span class="search-icon">🔎</span>
+          <input type="text" id="job-search-input" placeholder="Type ANY job title (e.g. Software Engineer, Data Scientist, Product Manager, Accountant, Designer)..." autocomplete="off" required>
+          <button type="button" id="clear-search-btn" class="clear-btn" title="Clear search">✕</button>
+          
+          <button type="submit" id="search-submit-btn" class="btn btn-primary btn-search-live">
+            <span class="icon">⚡</span> <span class="btn-text">Search Live Jobs</span>
+          </button>
+        </form>
+
+        <!-- Multi-Country Selection Tag Area -->
+        <div class="country-filter-section">
+          <div class="country-input-wrap">
+            <label class="section-label">🌍 Target Countries (Type any country or select multiple):</label>
+            <div class="tag-input-container" id="country-tag-container">
+              <input type="text" id="country-text-input" placeholder="Type country name (e.g. Malaysia, Singapore, Germany) & press Enter..." list="countries-datalist" autocomplete="off">
+            </div>
+            <datalist id="countries-datalist">
+              <option value="Malaysia">🇲🇾 Malaysia</option>
+              <option value="Singapore">🇸🇬 Singapore</option>
+              <option value="United States">🇺🇸 United States</option>
+              <option value="United Kingdom">🇬🇧 United Kingdom</option>
+              <option value="Germany">🇩🇪 Germany</option>
+              <option value="Australia">🇦🇺 Australia</option>
+              <option value="Canada">🇨🇦 Canada</option>
+              <option value="Japan">🇯🇵 Japan</option>
+              <option value="Switzerland">🇨🇭 Switzerland</option>
+              <option value="Netherlands">🇳🇱 Netherlands</option>
+              <option value="France">🇫🇷 France</option>
+              <option value="China">🇨🇳 China</option>
+              <option value="India">🇮🇳 India</option>
+            </datalist>
+          </div>
+
+          <div class="quick-country-suggestions">
+            <span class="suggestion-label">Quick Add:</span>
+            <button type="button" class="quick-country-btn" data-country="Malaysia">🇲🇾 Malaysia</button>
+            <button type="button" class="quick-country-btn" data-country="Singapore">🇸🇬 Singapore</button>
+            <button type="button" class="quick-country-btn" data-country="United States">🇺🇸 United States</button>
+            <button type="button" class="quick-country-btn" data-country="United Kingdom">🇬🇧 United Kingdom</button>
+            <button type="button" class="quick-country-btn" data-country="Germany">🇩🇪 Germany</button>
+            <button type="button" class="clear-countries-link" id="clear-all-countries-btn">Clear All</button>
+          </div>
+        </div>
+
+        <!-- Filter Row: Date Posted (Time Filter), Source, Workplace, Experience -->
+        <div class="filters-row">
+          <div class="filter-group">
+            <label for="filter-time">🕒 Date Posted</label>
+            <select id="filter-time" class="form-select">
+              <option value="any">Any Time</option>
+              <option value="24h">Past 24 Hours</option>
+              <option value="week">Past Week (7 Days)</option>
+              <option value="month">Past Month (30 Days)</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-source">🌐 Job Source</label>
+            <select id="filter-source" class="form-select">
+              <option value="">All Sources (Web-wide)</option>
+              <option value="LinkedIn">LinkedIn</option>
+              <option value="JobStreet">JobStreet</option>
+              <option value="Remotive">Remotive (Remote Tech)</option>
+              <option value="Arbeitnow">Arbeitnow (Global/EU)</option>
+              <option value="Web">Web Gateways</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-workplace">🏢 Workplace Type</label>
+            <select id="filter-workplace" class="form-select">
+              <option value="">All Workplace Types</option>
+              <option value="Hybrid">Hybrid</option>
+              <option value="Remote">Remote</option>
+              <option value="On-site">On-site</option>
+            </select>
+          </div>
+
+          <div class="filter-group">
+            <label for="filter-experience">🎓 Experience Level</label>
+            <select id="filter-experience" class="form-select">
+              <option value="">All Experience Levels</option>
+              <option value="Entry-level">Entry-level / Graduate</option>
+              <option value="Mid-level">Mid-level</option>
+              <option value="Senior">Senior</option>
+              <option value="Lead">Lead / Management</option>
+            </select>
+          </div>
+
+          <div class="filter-group filter-actions">
+            <label>&nbsp;</label>
+            <button type="button" id="reset-filters-btn" class="btn btn-secondary">Reset</button>
+          </div>
+        </div>
+
+        <!-- Role Suggestions -->
+        <div class="quick-tags">
+          <span class="quick-tag-label">Popular Searches:</span>
+          <button type="button" class="tag-pill" data-keyword="Software Engineer">Software Engineer</button>
+          <button type="button" class="tag-pill" data-keyword="Data Scientist">Data Scientist</button>
+          <button type="button" class="tag-pill" data-keyword="Product Manager">Product Manager</button>
+          <button type="button" class="tag-pill" data-keyword="Data Analyst">Data Analyst</button>
+          <button type="button" class="tag-pill" data-keyword="Accountant">Accountant</button>
+          <button type="button" class="tag-pill" data-keyword="Graphic Designer">Graphic Designer</button>
+          <button type="button" class="tag-pill" data-keyword="DevOps Engineer">DevOps Engineer</button>
+        </div>
+      </div>
+
+      <!-- Live Search Status Banner -->
+      <div class="results-header">
+        <div class="results-count">
+          <span id="search-status-text">Enter any job title above to fetch real-time jobs from <strong>LinkedIn</strong>, <strong>JobStreet</strong>, <strong>Remotive</strong>, <strong>Arbeitnow</strong>, and <strong>Web Gateways</strong>.</span>
+        </div>
+        <div class="stats-pills">
+          <span class="stat-badge"><span class="icon">💼</span> LinkedIn</span>
+          <span class="stat-badge"><span class="icon">🏢</span> JobStreet</span>
+          <span class="stat-badge"><span class="icon">⚡</span> Remotive</span>
+          <span class="stat-badge"><span class="icon">🌍</span> Arbeitnow</span>
+          <span class="stat-badge"><span class="icon">⭐</span> <span id="stat-saved-count">0</span> Saved</span>
+        </div>
+      </div>
+
+      <!-- Jobs Grid -->
+      <div id="jobs-grid" class="jobs-grid">
+        <!-- Live jobs will appear here on search -->
+      </div>
+
+      <!-- Load More Pagination Button -->
+      <div id="load-more-container" class="load-more-wrap hidden">
+        <button id="load-more-btn" class="btn btn-secondary btn-lg">
+          <span class="icon">➕</span> Load More Jobs (<span id="showing-count">0</span> of <span id="total-count">0</span>)
+        </button>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: SAVED JOBS & APPLICATION TRACKER ==================== -->
+    <section id="tracker-tab" class="tab-pane">
+      <div class="tracker-header">
+        <div>
+          <h2>My Saved Jobs & Application Pipeline</h2>
+          <p class="panel-subtitle">Jobs you bookmark from live searches are stored here to draft cover letters, prepare for interviews, and track your application progress.</p>
+        </div>
+        <div class="tracker-quick-stats">
+          <div class="stat-box">
+            <span class="stat-num" id="pipeline-total">0</span>
+            <span class="stat-label">Total Saved</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-num text-warning" id="pipeline-saved">0</span>
+            <span class="stat-label">Bookmarked</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-num text-info" id="pipeline-applied">0</span>
+            <span class="stat-label">Applied</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-num text-primary" id="pipeline-interviewing">0</span>
+            <span class="stat-label">Interviewing</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline Kanban Board -->
+      <div class="kanban-board">
+        <div class="kanban-col">
+          <div class="kanban-col-header">
+            <h4>⭐ Bookmarked / Saved</h4>
+            <span class="col-count" id="count-col-saved">0</span>
+          </div>
+          <div class="kanban-cards" id="col-saved-cards"></div>
+        </div>
+
+        <div class="kanban-col">
+          <div class="kanban-col-header">
+            <h4>🚀 Applied</h4>
+            <span class="col-count" id="count-col-applied">0</span>
+          </div>
+          <div class="kanban-cards" id="col-applied-cards"></div>
+        </div>
+
+        <div class="kanban-col">
+          <div class="kanban-col-header">
+            <h4>🎯 Interviewing</h4>
+            <span class="col-count" id="count-col-interviewing">0</span>
+          </div>
+          <div class="kanban-cards" id="col-interviewing-cards"></div>
+        </div>
+
+        <div class="kanban-col">
+          <div class="kanban-col-header">
+            <h4>🎉 Offer / Decisions</h4>
+            <span class="col-count" id="count-col-offered">0</span>
+          </div>
+          <div class="kanban-cards" id="col-offered-cards"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 3: COVER LETTER STUDIO ==================== -->
+    <section id="cover-letter-tab" class="tab-pane">
+      <div class="feature-layout">
+        <div class="feature-sidebar">
+          <div class="panel-card">
+            <h3><span class="icon">⚙️</span> Generation Setup</h3>
+            <p class="panel-subtitle">Select a saved job or tailor a custom cover letter.</p>
+
+            <div class="form-group">
+              <label for="cl-job-select">Target Role</label>
+              <select id="cl-job-select" class="form-select">
+                <option value="">-- Choose from Saved Jobs --</option>
+              </select>
+            </div>
+
+            <div id="cl-job-preview-box" class="job-quick-preview hidden">
+              <div class="preview-title" id="cl-preview-title">-</div>
+              <div class="preview-company" id="cl-preview-company">-</div>
+              <div class="preview-meta">
+                <span class="badge" id="cl-preview-country">🌍 -</span>
+                <span class="badge" id="cl-preview-source">💼 Source</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="cl-tone-select">Tone of Letter</label>
+              <select id="cl-tone-select" class="form-select">
+                <option value="professional">Professional & Polished</option>
+                <option value="enthusiastic">Enthusiastic & Passionate</option>
+                <option value="confident">Confident & Results-Oriented</option>
+                <option value="modern">Modern, Concise & Direct</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="cl-motivation-input">🎯 Why This Company? (Motivation & Culture Fit - Optional)</label>
+              <textarea id="cl-motivation-input" rows="2" placeholder="e.g. I admire your real-time data architecture and your expansion across Southeast Asia..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="cl-achievements-input">🏆 Key Achievements & Quantified Metrics (Optional)</label>
+              <textarea id="cl-achievements-input" rows="3" placeholder="e.g. Scaled database infrastructure to 10M daily users; reduced customer churn by 18%; led a cross-functional team of 6 engineers."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="cl-skills-highlight-input">🛠️ Skills to Emphasize (Optional)</label>
+              <input type="text" id="cl-skills-highlight-input" placeholder="e.g. Python, SQL, distributed systems, PyTorch">
+            </div>
+
+            <div class="form-group">
+              <label for="cl-career-story-input">📖 Career Story / Trajectory (Optional)</label>
+              <textarea id="cl-career-story-input" rows="2" placeholder="e.g. Transitioned from finance analytics to software engineering, bringing strong commercial acumen to technical problems."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="cl-focus-input">💡 Additional Custom Focus (Optional)</label>
+              <textarea id="cl-focus-input" rows="2" placeholder="e.g. Emphasize my 4 years of experience, leadership, and proactive problem ownership."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="cl-gemini-key">🔑 Gemini API Key (Optional for Gemini 1.5/2.0 Generation)</label>
+              <input type="password" id="cl-gemini-key" placeholder="AIzaSy... (uses smart built-in engine if blank)">
+            </div>
+
+            <div class="candidate-snapshot">
+              <div class="snapshot-header">
+                <strong>Applicant Snapshot</strong>
+                <a href="#" class="edit-profile-link" id="cl-edit-profile-btn">Edit Profile</a>
+              </div>
+              <div class="snapshot-body" id="cl-applicant-summary">
+                Loading profile...
+              </div>
+            </div>
+
+            <button id="generate-cl-btn" class="btn btn-primary btn-block btn-lg">
+              <span class="icon">✨</span> Generate Cover Letter
+            </button>
+          </div>
+        </div>
+
+        <div class="feature-main">
+          <div class="panel-card editor-card">
+            <div class="editor-header">
+              <div class="editor-title">
+                <h3>Cover Letter Output</h3>
+                <span class="editor-badge" id="cl-status-badge">Ready</span>
+              </div>
+              <div class="editor-actions">
+                <button id="copy-cl-btn" class="btn btn-sm btn-outline">
+                  <span class="icon">📋</span> Copy
+                </button>
+                <button id="download-cl-btn" class="btn btn-sm btn-outline">
+                  <span class="icon">💾</span> Download TXT
+                </button>
+                <button id="print-cl-btn" class="btn btn-sm btn-outline">
+                  <span class="icon">🖨️</span> Print / PDF
+                </button>
+              </div>
+            </div>
+
+            <div class="editor-body">
+              <textarea id="cl-output-textarea" placeholder="Your generated cover letter will appear here. You can freely edit and polish it before copying or downloading."></textarea>
+            </div>
+
+            <div class="editor-footer">
+              <span id="cl-word-count">0 words</span>
+              <span class="text-muted">Pro-tip: Tailored cover letters referencing company headquarters and scale achieve 3x higher response rates.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 4: INTERVIEW PREP COACH ==================== -->
+    <section id="interview-tab" class="tab-pane">
+      <div class="interview-header-bar">
+        <div class="selector-container">
+          <label for="prep-job-select"><strong>🎯 Select Job for Interview Preparation:</strong></label>
+          <select id="prep-job-select" class="form-select">
+            <option value="">-- Choose from Saved Jobs --</option>
+          </select>
+        </div>
+        <div id="prep-job-badge" class="prep-job-badge hidden">
+          <span id="prep-badge-title">-</span> at <span id="prep-badge-company">-</span>
+        </div>
+      </div>
+
+      <div class="prep-layout">
+        <div class="prep-questions-col">
+          <div class="sub-nav">
+            <button class="sub-nav-btn active" data-subtab="tech-questions">💻 Technical / Role Q&A</button>
+            <button class="sub-nav-btn" data-subtab="behavioral-questions">🤝 Behavioral (STAR)</button>
+            <button class="sub-nav-btn" data-subtab="company-questions">🏢 Company & Culture</button>
+            <button class="sub-nav-btn" data-subtab="reverse-questions">❓ Questions to Ask</button>
+          </div>
+
+          <div id="tech-questions" class="sub-tab-content active">
+            <div class="prep-intro-alert">
+              <strong>Role Rigor Check:</strong> Tailored questions designed to test core domain competencies, technical frameworks, and problem-solving required for this position.
+            </div>
+            <div id="tech-questions-list" class="accordion-list"></div>
+          </div>
+
+          <div id="behavioral-questions" class="sub-tab-content">
+            <div class="prep-intro-alert">
+              <strong>STAR Framework Guide:</strong> Structure your answers with <em>Situation</em>, <em>Task</em>, <em>Action</em>, and <em>Result</em>.
+            </div>
+            <div id="behavioral-questions-list" class="accordion-list"></div>
+          </div>
+
+          <div id="company-questions" class="sub-tab-content">
+            <div class="prep-intro-alert">
+              <strong>Company Context:</strong> Tailored insights leveraging company headquarters, scale, and industry positioning.
+            </div>
+            <div id="company-questions-list" class="accordion-list"></div>
+          </div>
+
+          <div id="reverse-questions" class="sub-tab-content">
+            <div class="prep-intro-alert">
+              <strong>Stand Out:</strong> Asking smart, insightful questions at the end of the interview shows leadership and curiosity.
+            </div>
+            <div id="reverse-questions-list" class="accordion-list"></div>
+          </div>
+        </div>
+
+        <div class="prep-practice-col">
+          <div class="panel-card practice-card">
+            <div class="practice-header">
+              <h3><span class="icon">🎙️</span> Mock Practice & AI Feedback</h3>
+              <span class="badge badge-accent">Live Simulator</span>
+            </div>
+            <p class="panel-subtitle">Select any question from the left, practice typing your answer, and receive instant AI grading and feedback.</p>
+
+            <div class="form-group">
+              <label>Current Selected Question:</label>
+              <div id="practice-current-question" class="practice-question-display">
+                Click "Practice Answering" on any question to load it here.
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="practice-user-answer">Your Practice Answer:</label>
+              <textarea id="practice-user-answer" rows="6" placeholder="Type your response here. Aim for 3-5 sentences including technical methods, trade-offs, and measurable outcomes..."></textarea>
+            </div>
+
+            <button id="evaluate-answer-btn" class="btn btn-primary btn-block">
+              <span class="icon">⚡</span> Evaluate My Answer
+            </button>
+
+            <div id="evaluation-result-box" class="evaluation-result hidden">
+              <div class="eval-score-row">
+                <div class="eval-score-circle">
+                  <span id="eval-score-num">85</span>
+                  <small>/100</small>
+                </div>
+                <div class="eval-score-verdict">
+                  <h4 id="eval-verdict-title">Strong Performance!</h4>
+                  <p id="eval-verdict-desc">Your answer covers key fundamentals with good depth.</p>
+                </div>
+              </div>
+
+              <div class="eval-section">
+                <h5>✅ Key Strengths</h5>
+                <ul id="eval-strengths-list"></ul>
+              </div>
+
+              <div class="eval-section">
+                <h5>💡 Suggestions for Improvement</h5>
+                <ul id="eval-improvements-list"></ul>
+              </div>
+
+              <div class="eval-section">
+                <h5>🏆 Model Sample Answer</h5>
+                <div id="eval-model-answer" class="eval-model-box"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 5: MY PROFILE ==================== -->
+    <section id="profile-tab" class="tab-pane">
+      <div class="profile-container">
+        <div class="panel-card">
+          <div class="profile-card-header">
+            <div>
+              <h2>Candidate Profile & Resume Data</h2>
+              <p class="panel-subtitle">Your profile information is automatically used by the AI engine to personalize cover letters and interview prep.</p>
+            </div>
+            <button id="save-profile-btn" class="btn btn-primary">
+              <span class="icon">💾</span> Save Profile
+            </button>
+          </div>
+
+          <form id="profile-form" class="profile-form">
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="prof-name">Full Name</label>
+                <input type="text" id="prof-name" placeholder="e.g. Alex Chen">
+              </div>
+              <div class="form-group">
+                <label for="prof-title">Current Professional Title</label>
+                <input type="text" id="prof-title" placeholder="e.g. Senior Software Engineer">
+              </div>
+            </div>
+
+            <div class="form-grid-3">
+              <div class="form-group">
+                <label for="prof-email">Email Address</label>
+                <input type="email" id="prof-email" placeholder="alex@example.com">
+              </div>
+              <div class="form-group">
+                <label for="prof-phone">Phone Number</label>
+                <input type="text" id="prof-phone" placeholder="+60 12-345 6789">
+              </div>
+              <div class="form-group">
+                <label for="prof-location">Location / Remote Preference</label>
+                <input type="text" id="prof-location" placeholder="e.g. Kuala Lumpur, Malaysia (Open to Remote)">
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="prof-experience">Years of Professional Experience</label>
+                <input type="number" id="prof-experience" min="0" max="40" value="4">
+              </div>
+              <div class="form-group">
+                <label for="prof-education">Education Background</label>
+                <input type="text" id="prof-education" placeholder="e.g. B.S. in Computer Science">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="prof-skills">Core Skills (Comma separated)</label>
+              <input type="text" id="prof-skills" placeholder="Python, SQL, React, Node.js, Cloud, Docker">
+            </div>
+
+            <div class="form-group">
+              <label for="prof-bio">Career Bio & Key Accomplishments</label>
+              <textarea id="prof-bio" rows="4" placeholder="Briefly describe your career highlights, impact achieved, and key technologies you excel in..."></textarea>
+            </div>
+
+            <div class="form-grid-3">
+              <div class="form-group">
+                <label for="prof-linkedin">LinkedIn Profile URL</label>
+                <input type="url" id="prof-linkedin" placeholder="https://linkedin.com/in/username">
+              </div>
+              <div class="form-group">
+                <label for="prof-github">GitHub / Portfolio URL</label>
+                <input type="url" id="prof-github" placeholder="https://github.com/username">
+              </div>
+              <div class="form-group">
+                <label for="prof-portfolio">Personal Website</label>
+                <input type="url" id="prof-portfolio" placeholder="https://yourportfolio.dev">
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Job Detail Modal -->
+  <div id="job-detail-modal" class="modal-backdrop hidden">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <h2 id="modal-job-title">Job Title</h2>
+            <div class="modal-subhead">
+              <span id="modal-job-company" class="company-name">Company</span>
+              <span id="modal-country-badge" class="badge badge-country">🌍 Country</span>
+              <span id="modal-size-badge" class="badge badge-size">👥 Size</span>
+              <span id="modal-source-badge" class="badge badge-source">💼 Source</span>
+              <span id="modal-workplace-badge" class="badge badge-workplace">🏢 Remote</span>
+            </div>
+          </div>
+          <button class="modal-close-btn" id="close-detail-modal">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="job-specs-grid">
+            <div class="spec-item">
+              <span class="spec-label">Headquarters / Origin</span>
+              <span class="spec-val" id="modal-spec-country">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Company Size</span>
+              <span class="spec-val" id="modal-spec-size">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Industry</span>
+              <span class="spec-val" id="modal-spec-industry">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Salary Range</span>
+              <span class="spec-val" id="modal-spec-salary">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Location</span>
+              <span class="spec-val" id="modal-spec-location">-</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Posted Date</span>
+              <span class="spec-val" id="modal-spec-posted">-</span>
+            </div>
+          </div>
+
+          <div class="modal-section">
+            <h3>About the Role</h3>
+            <p id="modal-job-desc" class="job-desc-text"></p>
+          </div>
+
+          <div class="modal-section" id="modal-resp-section">
+            <h3>Key Responsibilities</h3>
+            <ul id="modal-job-resp" class="styled-list"></ul>
+          </div>
+
+          <div class="modal-section" id="modal-req-section">
+            <h3>Requirements & Qualifications</h3>
+            <ul id="modal-job-req" class="styled-list"></ul>
+          </div>
+
+          <div class="modal-section">
+            <h3>Key Skills & Technologies</h3>
+            <div id="modal-job-skills" class="skills-wrap"></div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <div class="footer-left">
+            <button id="modal-save-btn" class="btn btn-outline">
+              ⭐ Save to My Tracker
+            </button>
+          </div>
+          <div class="footer-right">
+            <button id="modal-draft-cl-btn" class="btn btn-secondary">
+              <span class="icon">✍️</span> Draft Cover Letter
+            </button>
+            <button id="modal-prep-btn" class="btn btn-secondary">
+              <span class="icon">🎯</span> Prepare Interview
+            </button>
+            <a id="modal-apply-btn" href="#" target="_blank" rel="noopener" class="btn btn-primary btn-apply-link">
+              <span class="icon">↗</span> Apply Now
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden">Message</div>
+
+  <script src="app.js"></script>
+</body>
+</html>
