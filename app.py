@@ -29,17 +29,25 @@ class JobHuntRequestHandler(http.server.BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+        self.send_header("Access-Control-Max-Age", "86400")
         self.end_headers()
 
     def do_HEAD(self):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
     def send_json(self, data, status=200):
         body = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -147,9 +155,11 @@ class JobHuntRequestHandler(http.server.BaseHTTPRequestHandler):
 
             countries = [c.strip() for c in country_str.split(",") if c.strip()] if country_str else ["Malaysia"]
 
+            print(f"[LIVE SEARCH REQUEST] Query: '{q}' | Countries: {countries} | Time: {time_filter}")
             print(f"[LIVE SEARCH REQUEST] Query: '{q}' | Countries: {countries} | Time: {time_filter} | Source: {source_filter}")
             live_jobs = job_fetcher.search_live_jobs(query=q, countries=countries, time_filter=time_filter)
 
+            # In-memory post-filtering for workplace, size, experience if user selected them
             # In-memory post-filtering for workplace, size, experience, source if user selected them
             filtered = []
             for j in live_jobs:
@@ -328,6 +338,7 @@ class JobHuntRequestHandler(http.server.BaseHTTPRequestHandler):
         if data.get("profile_override"):
             profile.update(data["profile_override"])
 
+        letter = ai_engine.generate_cover_letter(job, profile, tone, focus_points)
         letter = ai_engine.generate_cover_letter(job, profile, tone, focus_points, optional_info)
 
         conn = database.get_db()
