@@ -198,8 +198,9 @@ class JobHuntRequestHandler(http.server.BaseHTTPRequestHandler):
             except Exception as db_e:
                 print(f"[Warning] Could not check saved status: {db_e}")
 
-            print(f"[LIVE SEARCH RESULT] Returned {len(filtered)} verified real jobs.")
-            self.send_json({"jobs": filtered, "total": len(filtered), "query": q, "countries": countries})
+            norm_q = job_fetcher.normalize_query(q)
+            print(f"[LIVE SEARCH RESULT] Returned {len(filtered)} verified real jobs for '{norm_q}' (raw: '{q}').")
+            self.send_json({"jobs": filtered, "total": len(filtered), "query": q, "normalized_query": norm_q, "countries": countries})
         except Exception as e:
             import traceback
             traceback.print_exc()

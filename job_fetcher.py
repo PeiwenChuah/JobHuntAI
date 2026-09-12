@@ -63,23 +63,105 @@ def get_jobstreet_market(country_str):
     return None
 
 
+import difflib
+
+TYPO_CORRECTIONS = {
+    'sceintist': 'scientist',
+    'scintist': 'scientist',
+    'scientst': 'scientist',
+    'scinetist': 'scientist',
+    'enginner': 'engineer',
+    'enginer': 'engineer',
+    'enginerr': 'engineer',
+    'enginerring': 'engineering',
+    'developper': 'developer',
+    'devloper': 'developer',
+    'developr': 'developer',
+    'programer': 'programmer',
+    'analist': 'analyst',
+    'anlyst': 'analyst',
+    'analyist': 'analyst',
+    'acountant': 'accountant',
+    'accountent': 'accountant',
+    'accoutant': 'accountant',
+    'mangager': 'manager',
+    'manger': 'manager',
+    'managar': 'manager',
+    'desinger': 'designer',
+    'designr': 'designer',
+    'secruity': 'security',
+    'securty': 'security',
+    'securiti': 'security',
+    'intelegence': 'intelligence',
+    'inteligence': 'intelligence',
+    'intellegence': 'intelligence',
+    'learing': 'learning',
+    'lernning': 'learning',
+    'artifical': 'artificial',
+    'markting': 'marketing',
+    'marketting': 'marketing',
+    'consulatan': 'consultant',
+    'consultent': 'consultant',
+    'specalist': 'specialist',
+    'specialst': 'specialist',
+    'bussiness': 'business',
+    'buisness': 'business',
+    'archtect': 'architect',
+    'architech': 'architect',
+}
+
+def normalize_query(query):
+    """Normalizes query casing, punctuation, and fixes common typos."""
+    if not query:
+        return ''
+    tokens = query.strip().split()
+    normalized = []
+    for token in tokens:
+        clean = re.sub(r'[^a-zA-Z0-9]', '', token.lower())
+        if clean in TYPO_CORRECTIONS:
+            normalized.append(TYPO_CORRECTIONS[clean])
+        else:
+            normalized.append(token)
+    return ' '.join(normalized)
+
+def is_fuzzy_word_match(w1, w2):
+    """Determines whether two word tokens match via exact, prefix/suffix, or high similarity."""
+    if w1 == w2:
+        return True
+    if len(w1) > 3 and len(w2) > 3:
+        if w1.startswith(w2) or w2.startswith(w1) or w1.endswith(w2) or w2.endswith(w1):
+            return True
+        if difflib.SequenceMatcher(None, w1, w2).ratio() >= 0.78:
+            return True
+    return False
+
 def compute_job_relevance(title, query):
     """
     Computes a relevance score (0-100) between title and search query.
-    Filters out completely unrelated positions.
+    Tolerates spelling typos, plurals, and domain synonyms while discarding unrelated roles.
     """
     if not title or not query:
         return 0
     t_clean = re.sub(r'[^a-zA-Z0-9\s]', ' ', title.lower()).strip()
-    q_clean = re.sub(r'[^a-zA-Z0-9\s]', ' ', query.lower()).strip()
-    if q_clean in t_clean:
+    q_norm = normalize_query(query).lower()
+    q_clean = re.sub(r'[^a-zA-Z0-9\s]', ' ', q_norm).strip()
+    raw_clean = re.sub(r'[^a-zA-Z0-9\s]', ' ', query.lower()).strip()
+
+    # 1. Exact phrase match in title (normalized or raw)
+    if q_clean in t_clean or raw_clean in t_clean:
         return 100
+
     t_words = set(t_clean.split())
     q_words = [w for w in q_clean.split() if len(w) > 1]
     if not q_words:
         return 0
-    if all(w in t_words or any(tw.startswith(w) or tw.endswith(w) for tw in t_words) for w in q_words):
+
+    # 2. All query words present with fuzzy tolerance
+    all_present = all(any(is_fuzzy_word_match(qw, tw) for tw in t_words) for qw in q_words)
+    if all_present:
         return 95
+
+    # 3. Domain synonyms
     domain_synonyms = {
         'data scientist': ['data science', 'machine learning', 'ml', 'ai scientist', 'applied scientist', 'research scientist', 'statistician', 'deep learning', 'nlp', 'computer vision', 'algorithm', 'artificial intelligence'],
         'software engineer': ['software developer', 'full stack', 'backend', 'frontend', 'programmer', 'software architecture', 'web developer', 'systems engineer', 'mobile developer', 'ios', 'android'],
@@ -90,20 +172,24 @@ def compute_job_relevance(title, query):
         'accountant': ['accounting', 'auditor', 'audit', 'financial analyst', 'tax', 'accounts executive', 'bookkeeper', 'finance executive']
     }
     for key, syns in domain_synonyms.items():
-        if key in q_clean:
+        if key in q_clean or key in raw_clean:
             for syn in syns:
                 if syn in t_clean:
                     return 85
-    matched = sum(1 for w in q_words if w in t_words or any(tw.startswith(w) or tw.endswith(w) for tw in t_words))
+
+    # 4. Fuzzy token overlap calculation
+    matched = sum(1 for qw in q_words if any(is_fuzzy_word_match(qw, tw) for tw in t_words))
     ratio = matched / len(q_words)
+
     if len(q_words) > 1:
-        if ratio < 0.8:
+        if ratio < 0.75:
             return 0
     else:
-        if ratio >= 1.0 or any(tw.startswith(q_words[0]) for tw in t_words):
+        if ratio >= 1.0 or any(is_fuzzy_word_match(q_words[0], tw) for tw in t_words):
             return 80
         else:
             return 0
+
     return int(ratio * 70)
 
 def search_live_jobs(query="Software Engineer", countries=None, time_filter="any", source_filter=None):
@@ -115,6 +201,7 @@ def search_live_jobs(query="Software Engineer", countries=None, time_filter="any
         return []
 
     query = query.strip()
+    norm_query = normalize_query(query)
 
     if not countries or len(countries) == 0:
         countries = ["Malaysia"]
@@ -129,28 +216,28 @@ def search_live_jobs(query="Software Engineer", countries=None, time_filter="any
 
             # 1. JobStreet: Fetch Page 1 and Page 2 (30 jobs each = up to 60 jobs)
             if market and (not source_filter or "jobstreet" in source_filter.lower()):
-                t_js1 = executor.submit(fetch_jobstreet_live, query=query, market=market, location=country, time_filter=time_filter, page=1, limit=30)
+                t_js1 = executor.submit(fetch_jobstreet_live, query=norm_query, market=market, location=country, time_filter=time_filter, page=1, limit=30)
                 tasks.append(("jobstreet", country, t_js1))
-                t_js2 = executor.submit(fetch_jobstreet_live, query=query, market=market, location=country, time_filter=time_filter, page=2, limit=30)
+                t_js2 = executor.submit(fetch_jobstreet_live, query=norm_query, market=market, location=country, time_filter=time_filter, page=2, limit=30)
                 tasks.append(("jobstreet", country, t_js2))
 
             # 2. LinkedIn: Fetch multiple offset batches (start=0, 10, 25 = up to 30 jobs)
             if not source_filter or "linkedin" in source_filter.lower():
-                t_li1 = executor.submit(fetch_linkedin_live, query=query, location=country, time_filter=time_filter, start=0, limit=10)
+                t_li1 = executor.submit(fetch_linkedin_live, query=norm_query, location=country, time_filter=time_filter, start=0, limit=10)
                 tasks.append(("linkedin", country, t_li1))
-                t_li2 = executor.submit(fetch_linkedin_live, query=query, location=country, time_filter=time_filter, start=10, limit=10)
+                t_li2 = executor.submit(fetch_linkedin_live, query=norm_query, location=country, time_filter=time_filter, start=10, limit=10)
                 tasks.append(("linkedin", country, t_li2))
-                t_li3 = executor.submit(fetch_linkedin_live, query=query, location=country, time_filter=time_filter, start=25, limit=10)
+                t_li3 = executor.submit(fetch_linkedin_live, query=norm_query, location=country, time_filter=time_filter, start=25, limit=10)
                 tasks.append(("linkedin", country, t_li3))
 
         # 3. Remotive: Web Remote jobs matching role
         if not source_filter or "remotive" in source_filter.lower():
-            t_rem = executor.submit(fetch_remotive_live, query=query, limit=25)
+            t_rem = executor.submit(fetch_remotive_live, query=norm_query, limit=25)
             tasks.append(("remotive", "Global", t_rem))
 
         # 4. Arbeitnow: Open Web jobs matching role
         if not source_filter or "arbeitnow" in source_filter.lower():
-            t_arb = executor.submit(fetch_arbeitnow_live, query=query, limit=25)
+            t_arb = executor.submit(fetch_arbeitnow_live, query=norm_query, limit=25)
             tasks.append(("arbeitnow", "Global", t_arb))
 
         # Collect results
@@ -188,10 +275,65 @@ def search_live_jobs(query="Software Engineer", countries=None, time_filter="any
         # Rank all live jobs by relevance score
         all_jobs.sort(key=lambda x: x.get("relevance_score", 50), reverse=True)
 
-        # 5. Add open web verified gateway search cards for comprehensive discovery
+        # 5. Add verified gateway search cards for comprehensive discovery
         primary_country = countries[0]
+        enc_norm_q = urllib.parse.quote(norm_query)
         enc_q = urllib.parse.quote(query)
         enc_loc = urllib.parse.quote(primary_country)
+        display_role = norm_query.title()
+
+        # LinkedIn verified search gateway
+        all_jobs.append({
+            "title": f"Explore All '{display_role}' Vacancies on LinkedIn Jobs ({primary_country})",
+            "company": "LinkedIn Talent Network",
+            "company_country": primary_country,
+            "company_size": "10,000+ employees",
+            "company_industry": "Professional Network & Hiring",
+            "location": primary_country,
+            "workplace_type": "Hybrid / On-site / Remote",
+            "experience_level": "All Levels",
+            "salary_range": "Market Competitive",
+            "summary": f"Verified live search gateway for active '{display_role}' vacancies across {primary_country} on LinkedIn. Filter by seniority, company, and location.",
+            "description": f"Comprehensive real-time listings for {display_role} posted by top employers on LinkedIn. Click to view live openings.",
+            "responsibilities": [
+                f"Explore verified '{display_role}' positions across top employers",
+                "Connect directly with hiring managers and recruiters"
+            ],
+            "requirements": [f"Relevant professional experience in {display_role}"],
+            "skills": [display_role, "LinkedIn Verified", primary_country],
+            "application_url": f"https://www.linkedin.com/jobs/search/?keywords={enc_norm_q}&location={enc_loc}",
+            "source": "LinkedIn",
+            "posted_at": "Updated Hourly",
+            "status": "Not Applied",
+            "relevance_score": 92
+        })
+
+        # JobStreet verified search gateway
+        is_my = 'malaysia' in primary_country.lower()
+        is_sg = 'singapore' in primary_country.lower()
+        js_url = f"https://www.jobstreet.com.my/jobs?q={enc_norm_q}" if is_my else (f"https://www.jobstreet.com.sg/jobs?q={enc_norm_q}" if is_sg else f"https://my.jobstreet.com/jobs?q={enc_norm_q}")
+
+        all_jobs.append({
+            "title": f"Browse All '{display_role}' Listings on JobStreet ({primary_country})",
+            "company": "JobStreet Southeast Asia",
+            "company_country": primary_country,
+            "company_size": "5,000+ employees",
+            "company_industry": "Southeast Asia Career Network",
+            "location": primary_country,
+            "workplace_type": "On-site / Hybrid",
+            "experience_level": "All Levels",
+            "salary_range": "Market Competitive",
+            "summary": f"Verified live vacancies for '{display_role}' on JobStreet. Access direct corporate employer openings and regional talent searches.",
+            "description": f"JobStreet connects thousands of Southeast Asian employers with qualified talent. Discover active {display_role} opportunities in {primary_country}.",
+            "responsibilities": [f"Review active {display_role} openings from regional leaders"],
+            "requirements": [f"Demonstrated background in {display_role}"],
+            "skills": [display_role, "JobStreet Verified"],
+            "application_url": js_url,
+            "source": "JobStreet",
+            "posted_at": "Updated Daily",
+            "status": "Not Applied",
+            "relevance_score": 92
+        })
 
         # Google Jobs search gateway
         all_jobs.append({
@@ -401,7 +543,14 @@ def fetch_linkedin_live(query="Software Engineer", location="Malaysia", time_fil
     enc_loc = urllib.parse.quote(location)
     url = f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords={enc_q}&location={enc_loc}{time_param}&start={start}"
 
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    req = urllib.request.Request(url, headers={
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"'
+    })
     jobs = []
 
     try:
