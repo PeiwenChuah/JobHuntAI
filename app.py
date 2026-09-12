@@ -155,11 +155,9 @@ class JobHuntRequestHandler(http.server.BaseHTTPRequestHandler):
 
             countries = [c.strip() for c in country_str.split(",") if c.strip()] if country_str else ["Malaysia"]
 
-            print(f"[LIVE SEARCH REQUEST] Query: '{q}' | Countries: {countries} | Time: {time_filter}")
             print(f"[LIVE SEARCH REQUEST] Query: '{q}' | Countries: {countries} | Time: {time_filter} | Source: {source_filter}")
-            live_jobs = job_fetcher.search_live_jobs(query=q, countries=countries, time_filter=time_filter)
+            live_jobs = job_fetcher.search_live_jobs(query=q, countries=countries, time_filter=time_filter, source_filter=source_filter)
 
-            # In-memory post-filtering for workplace, size, experience if user selected them
             # In-memory post-filtering for workplace, size, experience, source if user selected them
             filtered = []
             for j in live_jobs:
@@ -167,10 +165,29 @@ class JobHuntRequestHandler(http.server.BaseHTTPRequestHandler):
                     continue
                 if company_size and company_size not in (j.get("company_size") or ""):
                     continue
-                if workplace and workplace.lower() != (j.get("workplace_type") or "").lower() and j.get("workplace_type") != "Various":
-                    continue
-                if experience and experience.lower() != (j.get("experience_level") or "").lower() and j.get("experience_level") != "All Levels":
-                    continue
+                if workplace:
+                    wp_val = (j.get("workplace_type") or "").lower()
+                    loc_val = (j.get("location") or "").lower()
+                    title_val = (j.get("title") or "").lower()
+                    w_req = workplace.lower()
+                    if w_req == "remote" and not ("remote" in wp_val or "remote" in loc_val or "remote" in title_val or "various" in wp_val):
+                        continue
+                    elif w_req == "hybrid" and not ("hybrid" in wp_val or "hybrid" in loc_val or "hybrid" in title_val or "various" in wp_val):
+                        continue
+                    elif w_req in ("on-site", "onsite") and not ("on-site" in wp_val or "onsite" in wp_val or "office" in wp_val or "various" in wp_val or (not "remote" in wp_val and not "hybrid" in wp_val)):
+                        continue
+                if experience:
+                    exp_val = (j.get("experience_level") or "").lower()
+                    title_val = (j.get("title") or "").lower()
+                    e_req = experience.lower()
+                    if "entry" in e_req and not any(k in exp_val or k in title_val for k in ["entry", "junior", "intern", "graduate", "trainee", "associate", "all levels"]):
+                        continue
+                    elif "mid" in e_req and not any(k in exp_val or k in title_val for k in ["mid", "intermediate", "all levels"]):
+                        continue
+                    elif "senior" in e_req and not any(k in exp_val or k in title_val for k in ["senior", "sr", "principal", "staff", "all levels"]):
+                        continue
+                    elif "lead" in e_req and not any(k in exp_val or k in title_val for k in ["lead", "head", "manager", "director", "vp", "chief", "all levels"]):
+                        continue
                 filtered.append(j)
 
             # Check which of these are already saved by the user

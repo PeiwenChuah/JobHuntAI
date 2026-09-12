@@ -435,35 +435,22 @@ function setupLiveSearch() {
     });
   }
 
-  [workplaceSelect, expSelect, timeSelect].forEach(el => {
+  // Wire up instant real-time filtering on all 4 filter selects
+  [workplaceSelect, expSelect, timeSelect, sourceSelect].forEach(el => {
     if (el) {
       el.addEventListener('change', () => {
-        const q = searchInput ? searchInput.value.trim() : '';
-        if (q) performLiveSearch(q);
+        applyFiltersAndRender();
       });
     }
   });
 
-  if (sourceSelect) {
-    sourceSelect.addEventListener('change', () => {
-      applyFiltersAndRender();
-    });
-  }
-
   if (resetBtn) {
     resetBtn.addEventListener('click', () => {
-      if (searchInput) searchInput.value = '';
       if (workplaceSelect) workplaceSelect.value = '';
       if (expSelect) expSelect.value = '';
       if (timeSelect) timeSelect.value = 'any';
       if (sourceSelect) sourceSelect.value = '';
-      state.selectedCountries = ['Malaysia'];
-      state.liveJobs = [];
-      state.filteredJobs = [];
-      state.lastSearchQuery = '';
-      renderCountryTags();
-      document.querySelectorAll('.tag-pill').forEach(t => t.classList.remove('active'));
-      renderEmptyInitialState();
+      applyFiltersAndRender();
     });
   }
 
@@ -478,16 +465,179 @@ function setupLiveSearch() {
   });
 }
 
-function applyFiltersAndRender() {
-  const sourceFilter = (document.getElementById('filter-source')?.value || '').toLowerCase();
-  
-  if (sourceFilter) {
-    state.filteredJobs = state.liveJobs.filter(j => (j.source || '').toLowerCase().includes(sourceFilter));
-  } else {
-    state.filteredJobs = [...state.liveJobs];
+function computeJobRelevance(title, query) {
+  if (!title || !query) return 0;
+  const tClean = title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+  const qClean = query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+
+  // 1. Exact phrase match in title
+  if (tClean.includes(qClean)) return 100;
+
+  const tWords = new Set(tClean.split(/\s+/));
+  const qWords = qClean.split(/\s+/).filter(w => w.length > 1);
+
+  if (qWords.length === 0) return 0;
+
+  // 2. All query words present in title
+  const allPresent = qWords.every(w => tWords.has(w) || Array.from(tWords).some(tw => tw.startsWith(w) || tw.endsWith(w)));
+  if (allPresent) return 95;
+
+  // 3. Domain synonyms
+  const domainSynonyms = {
+    'data scientist': ['data science', 'machine learning', 'ml', 'ai scientist', 'applied scientist', 'research scientist', 'statistician', 'deep learning', 'nlp', 'computer vision', 'algorithm', 'artificial intelligence'],
+    'software engineer': ['software developer', 'full stack', 'backend', 'frontend', 'programmer', 'software architecture', 'web developer', 'systems engineer', 'mobile developer', 'ios', 'android'],
+    'product manager': ['product owner', 'product lead', 'head of product', 'associate product manager', 'group product manager', 'vp product'],
+    'data analyst': ['business intelligence', 'bi analyst', 'analytics', 'data reporting', 'insights analyst', 'data visualization'],
+    'data engineer': ['big data', 'etl', 'data warehouse', 'data platform', 'analytics engineer', 'database engineer'],
+    'devops engineer': ['site reliability', 'sre', 'platform engineer', 'infrastructure engineer', 'cloud engineer', 'devsecops', 'ci cd'],
+    'accountant': ['accounting', 'auditor', 'audit', 'financial analyst', 'tax', 'accounts executive', 'bookkeeper', 'finance executive']
+  };
+
+  for (const [key, syns] of Object.entries(domainSynonyms)) {
+    if (qClean.includes(key)) {
+      for (const syn of syns) {
+        if (tClean.includes(syn)) return 85;
+      }
+    }
   }
-  
+
+  // 4. Token overlap calculation
+  let matched = 0;
+  for (const w of qWords) {
+    if (tWords.has(w) || Array.from(tWords).some(tw => tw.startsWith(w) || tw.endsWith(w))) {
+      matched++;
+    }
+  }
+  const ratio = matched / qWords.length;
+
+  if (qWords.length > 1) {
+    if (ratio < 0.8) return 0;
+  } else {
+    if (ratio >= 1.0 || Array.from(tWords).some(tw => tw.startsWith(qWords[0]))) {
+      return 80;
+    } else {
+      return 0;
+    }
+  }
+
+  return Math.round(ratio * 70);
+}
+
+function inferExperienceFromTitle(title) {
+  const t = (title || '').toLowerCase();
+  if (t.includes('junior') || t.includes('entry') || t.includes('intern') || t.includes('graduate') || t.includes('associate')) return 'Entry-level';
+  if (t.includes('lead') || t.includes('manager') || t.includes('director') || t.includes('head') || t.includes('vp')) return 'Lead';
+  if (t.includes('senior') || t.includes('sr') || t.includes('principal') || t.includes('staff')) return 'Senior';
+  return 'Mid-level';
+}
+
+function applyFiltersAndRender() {
+  const timeFilter = document.getElementById('filter-time')?.value || 'any';
+  const sourceFilter = (document.getElementById('filter-source')?.value || '').toLowerCase().trim();
+  const workplaceFilter = (document.getElementById('filter-workplace')?.value || '').toLowerCase().trim();
+  const expFilter = (document.getElementById('filter-experience')?.value || '').toLowerCase().trim();
+
+  let results = [...state.liveJobs];
+
+  // 1. Source Filter (LinkedIn, JobStreet, Remotive, Arbeitnow, Web)
+  if (sourceFilter) {
+    results = results.filter(j => {
+      const src = (j.source || '').toLowerCase();
+      if (sourceFilter === 'web') {
+        return src.includes('web') || src.includes('google') || src.includes('indeed');
+      }
+      return src.includes(sourceFilter);
+    });
+  }
+
+  // 2. Workplace Filter (Remote, Hybrid, On-site)
+  if (workplaceFilter) {
+    results = results.filter(j => {
+      const wp = (j.workplace_type || '').toLowerCase();
+      const loc = (j.location || '').toLowerCase();
+      const title = (j.title || '').toLowerCase();
+      const desc = (j.description || j.summary || '').toLowerCase();
+
+      if (workplaceFilter === 'remote') {
+        return wp.includes('remote') || loc.includes('remote') || title.includes('remote') || desc.includes('100% remote') || desc.includes('work from home') || wp.includes('various');
+      } else if (workplaceFilter === 'hybrid') {
+        return wp.includes('hybrid') || loc.includes('hybrid') || title.includes('hybrid') || desc.includes('hybrid') || wp.includes('various');
+      } else if (workplaceFilter === 'on-site') {
+        return wp.includes('on-site') || wp.includes('onsite') || wp.includes('office') || wp.includes('various') || (!wp.includes('remote') && !wp.includes('hybrid'));
+      }
+      return true;
+    });
+  }
+
+  // 3. Experience Filter (Entry-level, Mid-level, Senior, Lead)
+  if (expFilter) {
+    results = results.filter(j => {
+      const exp = (j.experience_level || '').toLowerCase();
+      const title = (j.title || '').toLowerCase();
+
+      if (expFilter.includes('entry')) {
+        return exp.includes('entry') || exp.includes('junior') || exp.includes('intern') || exp.includes('graduate') || exp.includes('associate') || exp.includes('all levels') ||
+               title.includes('junior') || title.includes('entry') || title.includes('intern') || title.includes('graduate') || title.includes('associate') || title.includes('trainee');
+      } else if (expFilter.includes('mid')) {
+        return exp.includes('mid') || exp.includes('intermediate') || exp.includes('all levels') ||
+               (!title.includes('junior') && !title.includes('senior') && !title.includes('lead') && !title.includes('head') && !title.includes('director') && !title.includes('intern'));
+      } else if (expFilter.includes('senior')) {
+        return exp.includes('senior') || exp.includes('sr') || exp.includes('principal') || exp.includes('staff') || exp.includes('all levels') ||
+               title.includes('senior') || title.includes('sr.') || title.includes('sr ') || title.includes('principal') || title.includes('staff') || title.includes('expert');
+      } else if (expFilter.includes('lead')) {
+        return exp.includes('lead') || exp.includes('manager') || exp.includes('director') || exp.includes('head') || exp.includes('all levels') ||
+               title.includes('lead') || title.includes('head') || title.includes('manager') || title.includes('director') || title.includes('vp') || title.includes('chief');
+      }
+      return true;
+    });
+  }
+
+  // 4. Date Posted Filter (24h, week, month)
+  if (timeFilter && timeFilter !== 'any') {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const maxAgeMs = timeFilter === '24h' ? dayMs : (timeFilter === 'week' ? 7 * dayMs : 30 * dayMs);
+
+    results = results.filter(j => {
+      const postedStr = (j.posted_at || '').toLowerCase();
+      if (!postedStr) return true;
+
+      if (postedStr.includes('real-time') || postedStr.includes('hour') || postedStr.includes('minute') || postedStr.includes('just now') || postedStr.includes('today')) {
+        return true;
+      }
+      if (timeFilter !== '24h' && (postedStr.includes('day') || postedStr.includes('yesterday') || postedStr.includes('recent'))) {
+        const daysMatch = postedStr.match(/(\d+)\s*d/);
+        if (daysMatch) {
+          const days = parseInt(daysMatch[1], 10);
+          return timeFilter === 'week' ? days <= 7 : days <= 30;
+        }
+        return true;
+      }
+
+      const parsedTime = Date.parse(j.posted_at);
+      if (!isNaN(parsedTime)) {
+        return (now - parsedTime) <= maxAgeMs;
+      }
+      return true;
+    });
+  }
+
+  state.filteredJobs = results;
   state.displayedCount = 12;
+
+  // Update status summary with active filters
+  const statusText = document.getElementById('search-status-text');
+  if (statusText && state.lastSearchQuery) {
+    const activeFilterLabels = [];
+    if (sourceFilter) activeFilterLabels.push(`Source: ${sourceFilter.toUpperCase()}`);
+    if (workplaceFilter) activeFilterLabels.push(`Workplace: ${workplaceFilter.charAt(0).toUpperCase() + workplaceFilter.slice(1)}`);
+    if (expFilter) activeFilterLabels.push(`Experience: ${expFilter.charAt(0).toUpperCase() + expFilter.slice(1)}`);
+    if (timeFilter && timeFilter !== 'any') activeFilterLabels.push(`Date: ${timeFilter === '24h' ? 'Last 24h' : timeFilter === 'week' ? 'Past Week' : 'Past Month'}`);
+
+    const filterSuffix = activeFilterLabels.length > 0 ? ` (Filters: ${activeFilterLabels.join(', ')})` : '';
+    statusText.innerHTML = `Showing <strong>${results.length}</strong> of <strong>${state.liveJobs.length}</strong> verified positions for <strong>"${escapeHtml(state.lastSearchQuery)}"</strong>${filterSuffix}.`;
+  }
+
   renderLiveJobsGrid();
 }
 
@@ -547,26 +697,11 @@ async function performLiveSearch(keyword) {
       state.liveJobs = await clientFetchOpenJobs(keyword, countries, time);
     }
 
-    state.filteredJobs = [...state.liveJobs];
-    state.displayedCount = 12;
-
-    if (statusText) {
-      if (state.liveJobs.length > 0) {
-        statusText.innerHTML = `Found <strong>${state.liveJobs.length}</strong> live active positions for <strong>"${escapeHtml(keyword)}"</strong> across ${escapeHtml(countries)} (LinkedIn, JobStreet, Remotive, Arbeitnow & Web).`;
-      } else {
-        statusText.innerHTML = `No live jobs found for <strong>"${escapeHtml(keyword)}"</strong> in ${escapeHtml(countries)}.`;
-      }
-    }
-    renderLiveJobsGrid();
+    applyFiltersAndRender();
   } catch (err) {
     console.error('Search error:', err);
     state.liveJobs = await clientFetchOpenJobs(keyword, countries, time);
-    state.filteredJobs = [...state.liveJobs];
-    state.displayedCount = 12;
-    if (statusText) {
-      statusText.innerHTML = `Found <strong>${state.liveJobs.length}</strong> verified search gateways for <strong>"${escapeHtml(keyword)}"</strong> in ${escapeHtml(countries)}.`;
-    }
-    renderLiveJobsGrid();
+    applyFiltersAndRender();
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
@@ -579,21 +714,26 @@ async function clientFetchOpenJobs(keyword, countries, time) {
   const jobs = [];
   const primaryCountry = countries.split(',')[0].trim();
 
+  // 1. Fetch from Remotive API (Filtered strictly for role relevance)
   try {
-    const remRes = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(keyword)}&limit=15`);
+    const remRes = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(keyword)}&limit=25`);
     if (remRes.ok) {
       const remData = await remRes.json();
       const remJobs = remData.jobs || [];
       remJobs.forEach(j => {
+        const relevance = computeJobRelevance(j.title, keyword);
+        // Only accept if title is actually relevant to the searched role
+        if (relevance < 45) return;
+
         jobs.push({
           id: `rem-${j.id}`,
           title: j.title,
           company: j.company_name,
           company_country: primaryCountry || "Global / Remote",
-          company_size: "50-200 employees",
+          company_size: "50-500 employees",
           company_industry: j.category || "Technology",
           workplace_type: "Remote",
-          experience_level: "Mid-Senior",
+          experience_level: inferExperienceFromTitle(j.title),
           location: j.candidate_required_location || "Worldwide / Remote",
           salary_range: j.salary || "Competitive Market Rate",
           posted_at: j.publication_date ? new Date(j.publication_date).toLocaleDateString() : "Recent",
@@ -611,12 +751,50 @@ async function clientFetchOpenJobs(keyword, countries, time) {
           ],
           skills: j.tags || [keyword, "Remote", "Engineering"],
           application_url: j.url,
-          source: "Remotive"
+          source: "Remotive",
+          relevance_score: relevance
         });
       });
     }
   } catch (e) {
     console.warn('Remotive API fetch note:', e);
+  }
+
+  // 2. Fetch from Arbeitnow Public Jobs API (Filtered strictly for relevance)
+  try {
+    const arbRes = await fetch(`https://www.arbeitnow.com/api/job-board-api?search=${encodeURIComponent(keyword)}`);
+    if (arbRes.ok) {
+      const arbData = await arbRes.json();
+      const arbJobs = arbData.data || [];
+      arbJobs.forEach(j => {
+        const relevance = computeJobRelevance(j.title, keyword);
+        if (relevance < 45) return;
+
+        jobs.push({
+          id: `arb-${j.slug || Math.random().toString(36).substr(2, 9)}`,
+          title: j.title,
+          company: j.company_name,
+          company_country: primaryCountry || "International",
+          company_size: "1,000+ employees",
+          company_industry: "Information Technology",
+          workplace_type: j.remote ? "Remote" : "Hybrid",
+          experience_level: inferExperienceFromTitle(j.title),
+          location: j.location || primaryCountry,
+          salary_range: "Market Competitive",
+          posted_at: j.created_at ? new Date(j.created_at * 1000).toLocaleDateString() : "Recent",
+          summary: j.description ? j.description.replace(/<[^>]+>/g, '').slice(0, 200) + '...' : `Open position for ${j.title} at ${j.company_name}.`,
+          description: j.description ? j.description.replace(/<[^>]+>/g, '\n').slice(0, 800) : `Detailed vacancy for ${j.title}.`,
+          requirements: [`Relevant professional experience in ${keyword}`],
+          responsibilities: [`Drive milestones for ${j.title}`],
+          skills: j.tags || [keyword, "Web"],
+          application_url: j.url,
+          source: "Arbeitnow",
+          relevance_score: relevance
+        });
+      });
+    }
+  } catch (e) {
+    console.warn('Arbeitnow API fetch note:', e);
   }
 
   const isMY = primaryCountry.toLowerCase().includes('malaysia');
@@ -720,7 +898,10 @@ async function clientFetchOpenJobs(keyword, countries, time) {
     }
   ];
 
-  return [...jobs, ...gateways];
+  gateways.forEach(g => { g.relevance_score = 90; });
+  const combined = [...jobs, ...gateways];
+  combined.sort((a, b) => (b.relevance_score || 50) - (a.relevance_score || 50));
+  return combined;
 }
 
 // ============================================================================
@@ -738,13 +919,42 @@ function renderLiveJobsGrid() {
 
   if (total === 0) {
     if (loadMoreContainer) loadMoreContainer.classList.add('hidden');
-    container.innerHTML = `
-      <div class="empty-state" style="grid-column: 1 / -1; text-align: center; padding: 3rem; background: #fff; border-radius: 12px; border: 1px dashed var(--border-color);">
-        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔍</div>
-        <h3>No live jobs found for "${escapeHtml(state.lastSearchQuery)}"</h3>
-        <p class="text-muted" style="margin-top: 0.5rem;">Try searching for another role, clearing source filters, or broadening your country selection.</p>
-      </div>
-    `;
+    if (state.liveJobs && state.liveJobs.length > 0) {
+      container.innerHTML = `
+        <div class="empty-state" style="grid-column: 1 / -1; text-align: center; padding: 3.5rem 2rem; background: #fff; border-radius: 16px; border: 1.5px dashed var(--border-color); box-shadow: var(--shadow-sm);">
+          <div style="font-size: 2.5rem; margin-bottom: 0.75rem;">🔎</div>
+          <h3 style="font-size: 1.25rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.5rem;">No jobs match your selected filters</h3>
+          <p class="text-muted" style="max-width: 500px; margin: 0 auto 1.25rem; font-size: 0.9rem; line-height: 1.6;">
+            Found <strong>${state.liveJobs.length}</strong> verified postings for "${escapeHtml(state.lastSearchQuery)}", but none matched all active filter criteria.
+          </p>
+          <button type="button" id="grid-reset-filters-btn" class="btn btn-primary btn-sm">
+            ↺ Reset Filters to View All (${state.liveJobs.length})
+          </button>
+        </div>
+      `;
+      const gridResetBtn = document.getElementById('grid-reset-filters-btn');
+      if (gridResetBtn) {
+        gridResetBtn.addEventListener('click', () => {
+          const workplaceSelect = document.getElementById('filter-workplace');
+          const expSelect = document.getElementById('filter-experience');
+          const timeSelect = document.getElementById('filter-time');
+          const sourceSelect = document.getElementById('filter-source');
+          if (workplaceSelect) workplaceSelect.value = '';
+          if (expSelect) expSelect.value = '';
+          if (timeSelect) timeSelect.value = 'any';
+          if (sourceSelect) sourceSelect.value = '';
+          applyFiltersAndRender();
+        });
+      }
+    } else {
+      container.innerHTML = `
+        <div class="empty-state" style="grid-column: 1 / -1; text-align: center; padding: 3rem; background: #fff; border-radius: 12px; border: 1px dashed var(--border-color);">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔍</div>
+          <h3>No live jobs found for "${escapeHtml(state.lastSearchQuery)}"</h3>
+          <p class="text-muted" style="margin-top: 0.5rem;">Try searching for another role, clearing source filters, or broadening your country selection.</p>
+        </div>
+      `;
+    }
     return;
   }
 

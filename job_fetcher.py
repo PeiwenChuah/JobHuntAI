@@ -62,6 +62,50 @@ def get_jobstreet_market(country_str):
             return market
     return None
 
+
+def compute_job_relevance(title, query):
+    """
+    Computes a relevance score (0-100) between title and search query.
+    Filters out completely unrelated positions.
+    """
+    if not title or not query:
+        return 0
+    t_clean = re.sub(r'[^a-zA-Z0-9\s]', ' ', title.lower()).strip()
+    q_clean = re.sub(r'[^a-zA-Z0-9\s]', ' ', query.lower()).strip()
+    if q_clean in t_clean:
+        return 100
+    t_words = set(t_clean.split())
+    q_words = [w for w in q_clean.split() if len(w) > 1]
+    if not q_words:
+        return 0
+    if all(w in t_words or any(tw.startswith(w) or tw.endswith(w) for tw in t_words) for w in q_words):
+        return 95
+    domain_synonyms = {
+        'data scientist': ['data science', 'machine learning', 'ml', 'ai scientist', 'applied scientist', 'research scientist', 'statistician', 'deep learning', 'nlp', 'computer vision', 'algorithm', 'artificial intelligence'],
+        'software engineer': ['software developer', 'full stack', 'backend', 'frontend', 'programmer', 'software architecture', 'web developer', 'systems engineer', 'mobile developer', 'ios', 'android'],
+        'product manager': ['product owner', 'product lead', 'head of product', 'associate product manager', 'group product manager', 'vp product'],
+        'data analyst': ['business intelligence', 'bi analyst', 'analytics', 'data reporting', 'insights analyst', 'data visualization'],
+        'data engineer': ['big data', 'etl', 'data warehouse', 'data platform', 'analytics engineer', 'database engineer'],
+        'devops engineer': ['site reliability', 'sre', 'platform engineer', 'infrastructure engineer', 'cloud engineer', 'devsecops', 'ci cd'],
+        'accountant': ['accounting', 'auditor', 'audit', 'financial analyst', 'tax', 'accounts executive', 'bookkeeper', 'finance executive']
+    }
+    for key, syns in domain_synonyms.items():
+        if key in q_clean:
+            for syn in syns:
+                if syn in t_clean:
+                    return 85
+    matched = sum(1 for w in q_words if w in t_words or any(tw.startswith(w) or tw.endswith(w) for tw in t_words))
+    ratio = matched / len(q_words)
+    if len(q_words) > 1:
+        if ratio < 0.8:
+            return 0
+    else:
+        if ratio >= 1.0 or any(tw.startswith(q_words[0]) for tw in t_words):
+            return 80
+        else:
+            return 0
+    return int(ratio * 70)
+
 def search_live_jobs(query="Software Engineer", countries=None, time_filter="any", source_filter=None):
     """
     Fetches real-time live jobs across the open web (LinkedIn, JobStreet, Remotive, Arbeitnow, Web Gateways).
@@ -124,6 +168,12 @@ def search_live_jobs(query="Software Engineer", countries=None, time_filter="any
         rem_list = collected_by_source["remotive"]
         arb_list = collected_by_source["arbeitnow"]
 
+        # Filter and rank by relevance score
+        for j_list in [js_list, li_list, rem_list, arb_list]:
+            for j in j_list:
+                if "relevance_score" not in j:
+                    j["relevance_score"] = compute_job_relevance(j.get("title", ""), query)
+
         max_count = max(len(js_list), len(li_list), len(rem_list), len(arb_list), 1)
         for i in range(max_count):
             if i < len(js_list):
@@ -134,6 +184,9 @@ def search_live_jobs(query="Software Engineer", countries=None, time_filter="any
                 all_jobs.append(rem_list[i])
             if i < len(arb_list):
                 all_jobs.append(arb_list[i])
+
+        # Rank all live jobs by relevance score
+        all_jobs.sort(key=lambda x: x.get("relevance_score", 50), reverse=True)
 
         # 5. Add open web verified gateway search cards for comprehensive discovery
         primary_country = countries[0]
@@ -245,6 +298,9 @@ def fetch_jobstreet_live(query="Software Engineer", market=None, location="Malay
 
                 company_desc = item.get("advertiser", {}).get("description") or item.get("companyName") or "Company"
                 raw_company = company_desc.strip()
+                rel_score = compute_job_relevance(raw_title, query)
+                if rel_score < 40:
+                    continue
 
                 loc_labels = [l.get("label") for l in item.get("locations", []) if l.get("label")]
                 raw_loc = ", ".join(loc_labels) if loc_labels else location
@@ -367,6 +423,9 @@ def fetch_linkedin_live(query="Software Engineer", location="Malaysia", time_fil
                     continue
 
                 raw_title = html.unescape(title_m.group(1).strip())
+                rel_score = compute_job_relevance(raw_title, query)
+                if rel_score < 40:
+                    continue
                 raw_company = html.unescape(company_m.group(1).strip()) if company_m else "Company"
                 raw_loc = html.unescape(loc_m.group(1).strip()) if loc_m else location
                 raw_link = link_m.group(1).split("?")[0].strip()
@@ -438,9 +497,8 @@ def fetch_remotive_live(query="Software Engineer", limit=20):
                     continue
 
                 # Relevance check
-                title_lower = title.lower()
-                tags_str = " ".join(item.get("tags") or []).lower()
-                if query_words and not any(w in title_lower or w in tags_str for w in query_words):
+                rel_score = compute_job_relevance(title, query)
+                if rel_score < 45:
                     continue
 
                 company = item.get("company_name", "Tech Company").strip()
@@ -515,9 +573,8 @@ def fetch_arbeitnow_live(query="Software Engineer", limit=20):
                 if not title:
                     continue
 
-                title_lower = title.lower()
-                tags_str = " ".join(item.get("tags") or []).lower()
-                if query_words and not any(w in title_lower or w in tags_str for w in query_words):
+                rel_score = compute_job_relevance(title, query)
+                if rel_score < 45:
                     continue
 
                 company = item.get("company_name", "Global Employer").strip()
