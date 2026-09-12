@@ -163,11 +163,11 @@ def compute_job_relevance(title, query):
 
     # 3. Domain synonyms
     domain_synonyms = {
-        'data scientist': ['data science', 'machine learning', 'ml', 'ai scientist', 'applied scientist', 'research scientist', 'statistician', 'deep learning', 'nlp', 'computer vision', 'algorithm', 'artificial intelligence'],
-        'software engineer': ['software developer', 'full stack', 'backend', 'frontend', 'programmer', 'software architecture', 'web developer', 'systems engineer', 'mobile developer', 'ios', 'android'],
-        'product manager': ['product owner', 'product lead', 'head of product', 'associate product manager', 'group product manager', 'vp product'],
-        'data analyst': ['business intelligence', 'bi analyst', 'analytics', 'data reporting', 'insights analyst', 'data visualization'],
-        'data engineer': ['big data', 'etl', 'data warehouse', 'data platform', 'analytics engineer', 'database engineer'],
+        'data scientist': ['data science', 'machine learning', 'ml', 'ai scientist', 'ai engineer', 'machine learning engineer', 'ml engineer', 'applied scientist', 'research scientist', 'statistician', 'deep learning', 'nlp', 'computer vision', 'algorithm', 'artificial intelligence', 'genai', 'llm engineer'],
+        'software engineer': ['software developer', 'full stack', 'backend', 'frontend', 'programmer', 'software architecture', 'web developer', 'systems engineer', 'mobile developer', 'ios', 'android', 'cloud engineer', 'embedded engineer', 'firmware engineer'],
+        'product manager': ['product owner', 'product lead', 'head of product', 'associate product manager', 'group product manager', 'vp product', 'technical product manager'],
+        'data analyst': ['business intelligence', 'bi analyst', 'analytics', 'data reporting', 'insights analyst', 'data visualization', 'analytics engineer', 'bi developer'],
+        'data engineer': ['big data', 'etl', 'data warehouse', 'data platform', 'analytics engineer', 'database engineer', 'data pipeline'],
         'devops engineer': ['site reliability', 'sre', 'platform engineer', 'infrastructure engineer', 'cloud engineer', 'devsecops', 'ci cd'],
         'accountant': ['accounting', 'auditor', 'audit', 'financial analyst', 'tax', 'accounts executive', 'bookkeeper', 'finance executive']
     }
@@ -210,25 +210,23 @@ def search_live_jobs(query="Software Engineer", countries=None, time_filter="any
 
     # Execute all source tasks in parallel
     tasks = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=14) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=24) as executor:
         for country in countries:
             market = get_jobstreet_market(country)
 
-            # 1. JobStreet: Fetch Page 1 and Page 2 (30 jobs each = up to 60 jobs)
+            # 1. JobStreet: Fetch multiple pages (pages 1 to 4 or 6 = up to 120-180 jobs)
             if market and (not source_filter or "jobstreet" in source_filter.lower()):
-                t_js1 = executor.submit(fetch_jobstreet_live, query=norm_query, market=market, location=country, time_filter=time_filter, page=1, limit=30)
-                tasks.append(("jobstreet", country, t_js1))
-                t_js2 = executor.submit(fetch_jobstreet_live, query=norm_query, market=market, location=country, time_filter=time_filter, page=2, limit=30)
-                tasks.append(("jobstreet", country, t_js2))
+                num_js_pages = 6 if (source_filter and "jobstreet" in source_filter.lower()) else 4
+                for p in range(1, num_js_pages + 1):
+                    t_js = executor.submit(fetch_jobstreet_live, query=norm_query, market=market, location=country, time_filter=time_filter, page=p, limit=30)
+                    tasks.append(("jobstreet", country, t_js))
 
-            # 2. LinkedIn: Fetch multiple offset batches (start=0, 10, 25 = up to 30 jobs)
+            # 2. LinkedIn: Fetch multiple offset batches (start=0, 10, 20, 30, 40, 50, 60, 70 = up to 80-100 jobs)
             if not source_filter or "linkedin" in source_filter.lower():
-                t_li1 = executor.submit(fetch_linkedin_live, query=norm_query, location=country, time_filter=time_filter, start=0, limit=10)
-                tasks.append(("linkedin", country, t_li1))
-                t_li2 = executor.submit(fetch_linkedin_live, query=norm_query, location=country, time_filter=time_filter, start=10, limit=10)
-                tasks.append(("linkedin", country, t_li2))
-                t_li3 = executor.submit(fetch_linkedin_live, query=norm_query, location=country, time_filter=time_filter, start=25, limit=10)
-                tasks.append(("linkedin", country, t_li3))
+                li_starts = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90] if (source_filter and "linkedin" in source_filter.lower()) else [0, 10, 20, 30, 40, 50, 60, 70]
+                for st in li_starts:
+                    t_li = executor.submit(fetch_linkedin_live, query=norm_query, location=country, time_filter=time_filter, start=st, limit=10)
+                    tasks.append(("linkedin", country, t_li))
 
         # 3. Remotive: Web Remote jobs matching role
         if not source_filter or "remotive" in source_filter.lower():
@@ -401,13 +399,13 @@ def fetch_jobstreet_live(query="Software Engineer", market=None, location="Malay
     if not market:
         return []
 
-    date_param = ""
+    sort_param = ""
     if time_filter == "24h":
-        date_param = "&daterange=1"
+        sort_param = "&sortmode=ListedDate&daterange=1"
     elif time_filter == "week":
-        date_param = "&daterange=7"
+        sort_param = "&sortmode=ListedDate&daterange=7"
     elif time_filter == "month":
-        date_param = "&daterange=30"
+        sort_param = "&sortmode=ListedDate&daterange=30"
 
     enc_q = urllib.parse.quote(query)
     enc_loc = urllib.parse.quote(location)
@@ -415,7 +413,7 @@ def fetch_jobstreet_live(query="Software Engineer", market=None, location="Malay
     site_key = market["site_key"]
     display_domain = market["domain"]
 
-    url = f"{api_host}/api/jobsearch/v5/search?siteKey={site_key}&keywords={enc_q}&where={enc_loc}&sortmode=ListedDate{date_param}&pageSize={limit}&page={page}"
+    url = f"{api_host}/api/jobsearch/v5/search?siteKey={site_key}&keywords={enc_q}&where={enc_loc}{sort_param}&pageSize={limit}&page={page}"
     headers = {
         "User-Agent": USER_AGENT,
         "Accept": "application/json, text/plain, */*",
