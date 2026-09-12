@@ -147,10 +147,12 @@ async function detectBackendStatus() {
   if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('github.io')) {
     probeUrls.push(window.location.origin);
   }
-  // If hosted on GitHub Pages or local file, probe localhost:5000 in case user is running python3 app.py
+  // If hosted on GitHub Pages or local file, probe localhost:5000 and localhost:8000 in case user is running python3 app.py
   if (window.location.hostname.includes('github.io') || window.location.protocol === 'file:') {
     probeUrls.push('http://localhost:5000');
     probeUrls.push('http://127.0.0.1:5000');
+    probeUrls.push('http://localhost:8000');
+    probeUrls.push('http://127.0.0.1:8000');
   }
 
   let connected = false;
@@ -551,6 +553,54 @@ function isFuzzyWordMatch(w1, w2) {
   return false;
 }
 
+const ROLE_CLUSTERS = [
+  // AI, Data Science & Machine Learning
+  ['data scientist', 'data science', 'ai scientist', 'ai engineer', 'artificial intelligence', 'machine learning', 'machine learning engineer', 'ml engineer', 'applied scientist', 'research scientist', 'statistician', 'deep learning', 'nlp', 'computer vision', 'algorithm', 'genai', 'llm engineer', 'ai specialist', 'ai researcher'],
+
+  // Software Engineering & Development
+  ['software engineer', 'software developer', 'full stack', 'backend', 'frontend', 'programmer', 'software architecture', 'web developer', 'systems engineer', 'mobile developer', 'ios', 'android', 'cloud engineer', 'embedded engineer', 'firmware engineer', 'application developer'],
+
+  // Product & Project Management
+  ['product manager', 'product owner', 'product lead', 'head of product', 'associate product manager', 'group product manager', 'vp product', 'technical product manager', 'project manager', 'scrum master', 'program manager'],
+
+  // Data Analytics & Business Intelligence
+  ['data analyst', 'business intelligence', 'bi analyst', 'analytics', 'data reporting', 'insights analyst', 'data visualization', 'analytics engineer', 'bi developer', 'business analyst'],
+
+  // Data Engineering & Infrastructure
+  ['data engineer', 'big data', 'etl', 'data warehouse', 'data platform', 'database engineer', 'data pipeline', 'database administrator', 'dba'],
+
+  // DevOps & Cloud Infrastructure
+  ['devops engineer', 'site reliability', 'sre', 'platform engineer', 'infrastructure engineer', 'cloud architect', 'devsecops', 'ci cd', 'cloud engineer', 'systems administrator', 'sysadmin'],
+
+  // Chemical & Process Engineering
+  ['chemical engineer', 'chemical engineering', 'process engineer', 'process engineering', 'polymer engineer', 'materials engineer', 'refinery engineer', 'chemist', 'petrochemical', 'polymer'],
+
+  // Mechanical & Maintenance Engineering
+  ['mechanical engineer', 'mechanical engineering', 'hvac engineer', 'tooling engineer', 'maintenance engineer', 'equipment engineer', 'manufacturing engineer', 'piping engineer', 'cad designer'],
+
+  // Civil & Construction Engineering
+  ['civil engineer', 'civil engineering', 'structural engineer', 'site engineer', 'construction engineer', 'geotechnical engineer', 'c&s engineer', 'project engineer'],
+
+  // Electrical & Electronics Engineering
+  ['electrical engineer', 'electrical engineering', 'electronic engineer', 'electronics engineer', 'power engineer', 'pcb engineer', 'hardware engineer', 'instrumentation engineer', 'control engineer'],
+
+  // Accounting & Finance
+  ['accountant', 'accounting', 'auditor', 'audit', 'financial analyst', 'tax', 'accounts executive', 'bookkeeper', 'finance executive', 'finance manager', 'controller'],
+
+  // Human Resources
+  ['human resources', 'hr executive', 'hr manager', 'talent acquisition', 'recruiter', 'recruitment', 'people operations', 'hr generalist', 'hr specialist'],
+
+  // Marketing & Sales
+  ['marketing specialist', 'marketing executive', 'digital marketing', 'growth marketing', 'seo specialist', 'content creator', 'sales manager', 'sales executive', 'business development', 'account manager']
+];
+
+const GENERIC_ROLE_WORDS = new Set([
+  'engineer', 'developer', 'specialist', 'manager', 'analyst', 
+  'scientist', 'executive', 'officer', 'associate', 'consultant', 
+  'lead', 'intern', 'assistant', 'director', 'technician',
+  'senior', 'junior', 'staff', 'principal', 'head'
+]);
+
 function computeJobRelevance(title, query) {
   if (!title || !query) return 0;
   const tClean = title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
@@ -570,45 +620,31 @@ function computeJobRelevance(title, query) {
   const allPresent = qWords.every(w => Array.from(tWords).some(tw => isFuzzyWordMatch(w, tw)));
   if (allPresent) return 95;
 
-  // 3. Domain synonyms
-  const domainSynonyms = {
-    'data scientist': ['data science', 'machine learning', 'ml', 'ai scientist', 'ai engineer', 'machine learning engineer', 'ml engineer', 'applied scientist', 'research scientist', 'statistician', 'deep learning', 'nlp', 'computer vision', 'algorithm', 'artificial intelligence', 'genai', 'llm engineer'],
-    'software engineer': ['software developer', 'full stack', 'backend', 'frontend', 'programmer', 'software architecture', 'web developer', 'systems engineer', 'mobile developer', 'ios', 'android', 'cloud engineer', 'embedded engineer', 'firmware engineer'],
-    'product manager': ['product owner', 'product lead', 'head of product', 'associate product manager', 'group product manager', 'vp product', 'technical product manager'],
-    'data analyst': ['business intelligence', 'bi analyst', 'analytics', 'data reporting', 'insights analyst', 'data visualization', 'analytics engineer', 'bi developer'],
-    'data engineer': ['big data', 'etl', 'data warehouse', 'data platform', 'analytics engineer', 'database engineer', 'data pipeline'],
-    'devops engineer': ['site reliability', 'sre', 'platform engineer', 'infrastructure engineer', 'cloud engineer', 'devsecops', 'ci cd'],
-    'accountant': ['accounting', 'auditor', 'audit', 'financial analyst', 'tax', 'accounts executive', 'bookkeeper', 'finance executive']
-  };
-
-  for (const [key, syns] of Object.entries(domainSynonyms)) {
-    if (qClean.includes(key) || rawClean.includes(key)) {
-      for (const syn of syns) {
-        if (tClean.includes(syn)) return 85;
-      }
-    }
+  // 3. Bidirectional Cluster Matching (e.g. AI Scientist matches Data Scientist, ML Engineer, etc.)
+  for (const cluster of ROLE_CLUSTERS) {
+    const qMatches = cluster.some(term => qClean.includes(term) || rawClean.includes(term));
+    const tMatches = cluster.some(term => tClean.includes(term));
+    if (qMatches && tMatches) return 88;
   }
 
   // 4. Token overlap calculation with fuzzy tolerance
-  let matched = 0;
-  for (const w of qWords) {
-    if (Array.from(tWords).some(tw => isFuzzyWordMatch(w, tw))) {
-      matched++;
-    }
-  }
-  const ratio = matched / qWords.length;
+  const matchedQWords = qWords.filter(w => Array.from(tWords).some(tw => isFuzzyWordMatch(w, tw)));
+  const ratio = matchedQWords.length / qWords.length;
 
-  if (qWords.length > 1) {
-    if (ratio < 0.75) return 0;
-  } else {
-    if (ratio >= 1.0 || Array.from(tWords).some(tw => isFuzzyWordMatch(qWords[0], tw))) {
-      return 80;
-    } else {
-      return 0;
-    }
+  // Discard false positives if only generic words matched and domain-specific words failed
+  if (qWords.length > 1 && matchedQWords.every(w => GENERIC_ROLE_WORDS.has(w))) {
+    return 0;
   }
 
-  return Math.round(ratio * 70);
+  if (ratio >= 1.0) {
+    return 90;
+  } else if (ratio >= 0.5) {
+    return Math.round(55 + ratio * 25);
+  } else if (qWords.length === 1 && matchedQWords.length === 1) {
+    return 80;
+  }
+
+  return Math.round(ratio * 40);
 }
 
 function inferExperienceFromTitle(title) {
@@ -710,6 +746,22 @@ function applyFiltersAndRender() {
     });
   }
 
+  // Prioritize LinkedIn and JobStreet at the top of results
+  results.sort((a, b) => {
+    function getPriority(j) {
+      const src = (j.source || '').toLowerCase();
+      if (src.includes('linkedin')) return 1;
+      if (src.includes('jobstreet')) return 1;
+      if (src.includes('remotive')) return 2;
+      if (src.includes('arbeitnow')) return 2;
+      return 3;
+    }
+    const pA = getPriority(a);
+    const pB = getPriority(b);
+    if (pA !== pB) return pA - pB;
+    return (b.relevance_score || 0) - (a.relevance_score || 0);
+  });
+
   state.filteredJobs = results;
   state.displayedCount = 12;
 
@@ -808,92 +860,7 @@ async function performLiveSearch(keyword) {
 }
 
 async function clientFetchOpenJobs(keyword, countries, time) {
-  const jobs = [];
   const primaryCountry = countries.split(',')[0].trim();
-
-  // 1. Fetch from Remotive API (Filtered strictly for role relevance)
-  try {
-    const remRes = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(keyword)}&limit=25`);
-    if (remRes.ok) {
-      const remData = await remRes.json();
-      const remJobs = remData.jobs || [];
-      remJobs.forEach(j => {
-        const relevance = computeJobRelevance(j.title, keyword);
-        // Only accept if title is actually relevant to the searched role
-        if (relevance < 45) return;
-
-        jobs.push({
-          id: `rem-${j.id}`,
-          title: j.title,
-          company: j.company_name,
-          company_country: primaryCountry || "Global / Remote",
-          company_size: "50-500 employees",
-          company_industry: j.category || "Technology",
-          workplace_type: "Remote",
-          experience_level: inferExperienceFromTitle(j.title),
-          location: j.candidate_required_location || "Worldwide / Remote",
-          salary_range: j.salary || "Competitive Market Rate",
-          posted_at: j.publication_date ? new Date(j.publication_date).toLocaleDateString() : "Recent",
-          summary: j.description ? j.description.replace(/<[^>]+>/g, '').slice(0, 200) + '...' : `Live active position at ${j.company_name}.`,
-          description: j.description ? j.description.replace(/<[^>]+>/g, '\n').slice(0, 800) : `Detailed role for ${j.title}.`,
-          requirements: [
-            `Demonstrated proficiency in ${keyword} domains`,
-            "Strong collaboration and communication skills",
-            "Ability to work independently across distributed timezones"
-          ],
-          responsibilities: [
-            `Develop and execute core projects in ${keyword}`,
-            "Collaborate with engineering, product, and leadership teams",
-            "Maintain code quality, documentation, and operational reliability"
-          ],
-          skills: j.tags || [keyword, "Remote", "Engineering"],
-          application_url: j.url,
-          source: "Remotive",
-          relevance_score: relevance
-        });
-      });
-    }
-  } catch (e) {
-    console.warn('Remotive API fetch note:', e);
-  }
-
-  // 2. Fetch from Arbeitnow Public Jobs API (Filtered strictly for relevance)
-  try {
-    const arbRes = await fetch(`https://www.arbeitnow.com/api/job-board-api?search=${encodeURIComponent(keyword)}`);
-    if (arbRes.ok) {
-      const arbData = await arbRes.json();
-      const arbJobs = arbData.data || [];
-      arbJobs.forEach(j => {
-        const relevance = computeJobRelevance(j.title, keyword);
-        if (relevance < 45) return;
-
-        jobs.push({
-          id: `arb-${j.slug || Math.random().toString(36).substr(2, 9)}`,
-          title: j.title,
-          company: j.company_name,
-          company_country: primaryCountry || "International",
-          company_size: "1,000+ employees",
-          company_industry: "Information Technology",
-          workplace_type: j.remote ? "Remote" : "Hybrid",
-          experience_level: inferExperienceFromTitle(j.title),
-          location: j.location || primaryCountry,
-          salary_range: "Market Competitive",
-          posted_at: j.created_at ? new Date(j.created_at * 1000).toLocaleDateString() : "Recent",
-          summary: j.description ? j.description.replace(/<[^>]+>/g, '').slice(0, 200) + '...' : `Open position for ${j.title} at ${j.company_name}.`,
-          description: j.description ? j.description.replace(/<[^>]+>/g, '\n').slice(0, 800) : `Detailed vacancy for ${j.title}.`,
-          requirements: [`Relevant professional experience in ${keyword}`],
-          responsibilities: [`Drive milestones for ${j.title}`],
-          skills: j.tags || [keyword, "Web"],
-          application_url: j.url,
-          source: "Arbeitnow",
-          relevance_score: relevance
-        });
-      });
-    }
-  } catch (e) {
-    console.warn('Arbeitnow API fetch note:', e);
-  }
-
   const isMY = primaryCountry.toLowerCase().includes('malaysia');
   const isSG = primaryCountry.toLowerCase().includes('singapore');
   const jobStreetHost = isSG ? 'https://sg.jobstreet.com' : 'https://my.jobstreet.com';
@@ -903,99 +870,176 @@ async function clientFetchOpenJobs(keyword, countries, time) {
   const encNorm = encodeURIComponent(normKeyword);
   const encLoc = encodeURIComponent(primaryCountry);
 
-  // Generate comprehensive verified LinkedIn live postings across companies and specializations
-  const linkedinTiers = [
-    { prefix: "Senior", company: "Grab", industry: "SuperApp & Cloud AI", exp: "Senior", wp: "Hybrid", timeDesc: "1h ago", score: 100 },
-    { prefix: "Lead", company: "GXBank", industry: "Digital Banking & Fintech", exp: "Lead", wp: "Remote", timeDesc: "3h ago", score: 98 },
-    { prefix: "Staff", company: "Shopee", industry: "E-Commerce & Algorithm Ops", exp: "Lead", wp: "Hybrid", timeDesc: "Today", score: 97 },
-    { prefix: "", company: "Funding Societies | Modalku", industry: "SME FinTech & Credit", exp: "Mid-level", wp: "On-site", timeDesc: "Today", score: 96 },
-    { prefix: "AI / ML Solutions", company: "NTT DATA, Inc.", industry: "Enterprise AI Consulting", exp: "Mid-level", wp: "Hybrid", timeDesc: "Yesterday", score: 95 },
-    { prefix: "Senior", company: "NielsenIQ", industry: "Consumer Analytics & Big Data", exp: "Senior", wp: "On-site", timeDesc: "Yesterday", score: 95 },
-    { prefix: "Remote", company: "Smadex Distributed Tech", industry: "Programmatic Ads & ML", exp: "Mid-level", wp: "Remote", timeDesc: "2d ago", score: 94 },
-    { prefix: "Junior / Associate", company: "CelcomDigi", industry: "Telecommunications & Tech", exp: "Entry-level", wp: "Hybrid", timeDesc: "2d ago", score: 93 },
-    { prefix: "Principal", company: "CIMB Group", industry: "Banking & Financial Services", exp: "Lead", wp: "Hybrid", timeDesc: "3d ago", score: 92 },
-    { prefix: "Applied", company: "AirAsia MOVE", industry: "Travel Tech & Platform", exp: "Mid-level", wp: "On-site", timeDesc: "4d ago", score: 91 },
-    { prefix: "Quantitative / Risk", company: "Maybank", industry: "Investment & Wholesale Banking", exp: "Senior", wp: "On-site", timeDesc: "5d ago", score: 90 },
-    { prefix: "Global Remote", company: "Worldwide Tech Collective", industry: "Decentralized Software", exp: "Senior", wp: "Remote", timeDesc: "Recent", score: 89 }
-  ];
+  const primaryJobs = [];
+  const secondaryJobs = [];
+  const seenUrls = new Set();
 
-  linkedinTiers.forEach((tier, i) => {
-    const fullTitle = tier.prefix ? `${tier.prefix} ${displayRole}` : displayRole;
-    jobs.push({
-      id: `li-live-${i}-${Date.now()}`,
-      title: fullTitle,
-      company: tier.company,
+  // 1. TOP PRIORITY: Match against Verified Live Jobs dataset (Real scraped postings from LinkedIn and JobStreet)
+  const verifiedDataset = (typeof window !== 'undefined' && Array.isArray(window.VERIFIED_LIVE_JOBS)) ? window.VERIFIED_LIVE_JOBS : [];
+  const matchedVerified = [];
+
+  verifiedDataset.forEach(vJob => {
+    const rel = computeJobRelevance(vJob.title, keyword);
+    if (rel >= 45) {
+      const u = vJob.application_url;
+      if (u && !seenUrls.has(u)) {
+        seenUrls.add(u);
+        matchedVerified.push({
+          ...vJob,
+          relevance_score: rel
+        });
+      }
+    }
+  });
+
+  const liVerified = matchedVerified.filter(j => (j.source || '').toLowerCase().includes('linkedin'));
+  const jsVerified = matchedVerified.filter(j => (j.source || '').toLowerCase().includes('jobstreet'));
+
+  liVerified.sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
+  jsVerified.sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
+
+  // Interleave verified LinkedIn and JobStreet postings so both top platforms are prominent
+  const maxVerified = Math.max(liVerified.length, jsVerified.length);
+  for (let i = 0; i < maxVerified; i++) {
+    if (i < liVerified.length) primaryJobs.push(liVerified[i]);
+    if (i < jsVerified.length) primaryJobs.push(jsVerified[i]);
+  }
+
+  // If no verified vacancies matched an uncommon keyword, add authentic search portal gateways
+  if (primaryJobs.length === 0) {
+    primaryJobs.push({
+      id: `li-portal-${Date.now()}`,
+      title: `Search "${displayRole}" Openings on LinkedIn Jobs (${primaryCountry})`,
+      company: "LinkedIn Talent Network",
       company_country: primaryCountry,
-      company_size: "1,000+ employees",
-      company_industry: tier.industry,
-      workplace_type: tier.wp,
-      experience_level: tier.exp,
+      company_size: "10,000+ employees",
+      company_industry: "Professional Network & Hiring",
+      workplace_type: "Hybrid / On-site / Remote",
+      experience_level: "All Levels",
       location: primaryCountry,
-      salary_range: "Market Competitive Rate",
-      posted_at: tier.timeDesc,
-      summary: `Verified active ${fullTitle} opening at ${tier.company} (${primaryCountry}). Apply directly via official LinkedIn post.`,
-      description: `Direct verified opening for ${fullTitle} at ${tier.company} in ${primaryCountry}. Connect with hiring teams, view team profiles, and review responsibilities on LinkedIn.`,
-      requirements: [
-        `Demonstrated proficiency in ${displayRole} and core stack`,
-        "Strong collaboration, communication, and agile execution",
-        "Updated LinkedIn credentials and verified career achievements"
-      ],
-      responsibilities: [
-        `Deliver high-impact production milestones for ${fullTitle}`,
-        "Work with multi-functional teams across product and engineering"
-      ],
-      skills: [displayRole, tier.company, "LinkedIn Verified", primaryCountry],
-      application_url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(fullTitle + ' ' + tier.company)}&location=${encLoc}`,
+      salary_range: "Market Competitive",
+      posted_at: "Live Index",
+      summary: `Direct live query to active ${displayRole} listings across ${primaryCountry} on LinkedIn.`,
+      description: `Browse real-time verified postings for ${displayRole} across top companies on LinkedIn.`,
+      requirements: [`Experience or background in ${displayRole}`],
+      responsibilities: ["Review active opportunities and apply on LinkedIn"],
+      skills: [displayRole, "LinkedIn Verified", primaryCountry],
+      application_url: `https://www.linkedin.com/jobs/search/?keywords=${encNorm}&location=${encLoc}`,
       source: "LinkedIn",
-      relevance_score: tier.score
+      relevance_score: 95
     });
-  });
-
-  // Generate comprehensive verified JobStreet live postings across top regional enterprises
-  const jobStreetTiers = [
-    { prefix: "Senior", company: "Public Bank Berhad", industry: "Banking & Financial Services", exp: "Senior", wp: "On-site", timeDesc: "Just now", score: 98 },
-    { prefix: "", company: "Maxis Broadband", industry: "Telecommunications & Digital Services", exp: "Mid-level", wp: "Hybrid", timeDesc: "4h ago", score: 96 },
-    { prefix: "Lead", company: "Astro", industry: "Media, Streaming & Content Tech", exp: "Lead", wp: "Hybrid", timeDesc: "Today", score: 95 },
-    { prefix: "Specialist", company: "Petronas Digital", industry: "Energy, Oil & Gas Technology", exp: "Senior", wp: "On-site", timeDesc: "1d ago", score: 94 },
-    { prefix: "Associate / Junior", company: "Hong Leong Bank", industry: "Banking & Consumer Finance", exp: "Entry-level", wp: "On-site", timeDesc: "2d ago", score: 93 },
-    { prefix: "Operations & Analytics", company: "DHL Express Regional", industry: "Supply Chain & Logistics Tech", exp: "Mid-level", wp: "Hybrid", timeDesc: "2d ago", score: 92 },
-    { prefix: "Senior", company: "Sime Darby Industrial", industry: "Heavy Machinery & Industrial Tech", exp: "Senior", wp: "On-site", timeDesc: "3d ago", score: 91 },
-    { prefix: "Digital Platforms", company: "Sunway Group", industry: "Conglomerate & Smart Cities", exp: "Mid-level", wp: "Hybrid", timeDesc: "3d ago", score: 90 },
-    { prefix: "Remote", company: "Regional SaaS Unicorn", industry: "Enterprise Cloud Software", exp: "Mid-level", wp: "Remote", timeDesc: "4d ago", score: 89 },
-    { prefix: "Graduate / Trainee", company: "Top Regional Career Portal", industry: "Technology Talent Program", exp: "Entry-level", wp: "On-site", timeDesc: "Recent", score: 88 }
-  ];
-
-  jobStreetTiers.forEach((tier, i) => {
-    const fullTitle = tier.prefix ? `${tier.prefix} ${displayRole}` : displayRole;
-    jobs.push({
-      id: `js-live-${i}-${Date.now()}`,
-      title: fullTitle,
-      company: tier.company,
-      company_country: isSG ? "Singapore" : (isMY ? "Malaysia" : primaryCountry),
-      company_size: "1,000 - 5,000 employees",
-      company_industry: tier.industry,
-      workplace_type: tier.wp,
-      experience_level: tier.exp,
-      location: isSG ? "Singapore" : (isMY ? "Malaysia" : primaryCountry),
-      salary_range: "Competitive Local Market Rates",
-      posted_at: tier.timeDesc,
-      summary: `Verified live opening for ${fullTitle} at ${tier.company} on JobStreet. Direct application route with employer tracking.`,
-      description: `Active corporate vacancy for ${fullTitle} at ${tier.company}. Join established regional teams with structured career pathways and healthcare benefits.`,
-      requirements: [
-        `Demonstrated background and practical capabilities in ${displayRole}`,
-        "Strong analytical mindset and effective problem-solving skills"
-      ],
-      responsibilities: [
-        `Execute strategic milestones for ${fullTitle}`,
-        "Collaborate effectively with cross-department engineering teams"
-      ],
-      skills: [displayRole, tier.company, "JobStreet Verified", primaryCountry],
-      application_url: `${jobStreetHost}/jobs?keywords=${encodeURIComponent(fullTitle + ' ' + tier.company)}`,
+    primaryJobs.push({
+      id: `js-portal-${Date.now()}`,
+      title: `Browse "${displayRole}" Listings on JobStreet (${primaryCountry})`,
+      company: "JobStreet Southeast Asia",
+      company_country: primaryCountry,
+      company_size: "5,000+ employees",
+      company_industry: "Southeast Asia Career Network",
+      workplace_type: "On-site / Hybrid",
+      experience_level: "All Levels",
+      location: primaryCountry,
+      salary_range: "Market Competitive",
+      posted_at: "Live Index",
+      summary: `Direct live query to active ${displayRole} listings across ${primaryCountry} on JobStreet.`,
+      description: `JobStreet connects thousands of Southeast Asian employers with qualified talent. Discover active ${displayRole} openings.`,
+      requirements: [`Background in ${displayRole}`],
+      responsibilities: ["Explore active corporate vacancies on JobStreet"],
+      skills: [displayRole, "JobStreet Verified", primaryCountry],
+      application_url: `${jobStreetHost}/jobs?keywords=${encNorm}`,
       source: "JobStreet",
-      relevance_score: tier.score
+      relevance_score: 95
     });
-  });
+  }
 
+  // 2. Fetch from Remotive API (Remote tech jobs)
+  try {
+    const remRes = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(keyword)}&limit=25`);
+    if (remRes.ok) {
+      const remData = await remRes.json();
+      const remJobs = remData.jobs || [];
+      remJobs.forEach(j => {
+        const relevance = computeJobRelevance(j.title, keyword);
+        if (relevance < 45) return;
+        const u = j.url;
+        if (u && !seenUrls.has(u)) {
+          seenUrls.add(u);
+          secondaryJobs.push({
+            id: `rem-${j.id}`,
+            title: j.title,
+            company: j.company_name,
+            company_country: primaryCountry || "Global / Remote",
+            company_size: "50-500 employees",
+            company_industry: j.category || "Technology",
+            workplace_type: "Remote",
+            experience_level: inferExperienceFromTitle(j.title),
+            location: j.candidate_required_location || "Worldwide / Remote",
+            salary_range: j.salary || "Competitive Market Rate",
+            posted_at: j.publication_date ? new Date(j.publication_date).toLocaleDateString() : "Recent",
+            summary: j.description ? j.description.replace(/<[^>]+>/g, '').slice(0, 200) + '...' : `Live active position at ${j.company_name}.`,
+            description: j.description ? j.description.replace(/<[^>]+>/g, '\n').slice(0, 800) : `Detailed role for ${j.title}.`,
+            requirements: [
+              `Demonstrated proficiency in ${keyword} domains`,
+              "Strong collaboration and communication skills",
+              "Ability to work independently across distributed timezones"
+            ],
+            responsibilities: [
+              `Develop and execute core projects in ${keyword}`,
+              "Collaborate with engineering, product, and leadership teams",
+              "Maintain code quality, documentation, and operational reliability"
+            ],
+            skills: j.tags || [keyword, "Remote", "Engineering"],
+            application_url: j.url,
+            source: "Remotive",
+            relevance_score: relevance
+          });
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Remotive API fetch note:', e);
+  }
+
+  // 3. Fetch from Arbeitnow Public Jobs API
+  try {
+    const arbRes = await fetch(`https://www.arbeitnow.com/api/job-board-api?search=${encodeURIComponent(keyword)}`);
+    if (arbRes.ok) {
+      const arbData = await arbRes.json();
+      const arbJobs = arbData.data || [];
+      arbJobs.forEach(j => {
+        const relevance = computeJobRelevance(j.title, keyword);
+        if (relevance < 45) return;
+        const u = j.url;
+        if (u && !seenUrls.has(u)) {
+          seenUrls.add(u);
+          secondaryJobs.push({
+            id: `arb-${j.slug || Math.random().toString(36).substr(2, 9)}`,
+            title: j.title,
+            company: j.company_name,
+            company_country: primaryCountry || "International",
+            company_size: "1,000+ employees",
+            company_industry: "Information Technology",
+            workplace_type: j.remote ? "Remote" : "Hybrid",
+            experience_level: inferExperienceFromTitle(j.title),
+            location: j.location || primaryCountry,
+            salary_range: "Market Competitive",
+            posted_at: j.created_at ? new Date(j.created_at * 1000).toLocaleDateString() : "Recent",
+            summary: j.description ? j.description.replace(/<[^>]+>/g, '').slice(0, 200) + '...' : `Open position for ${j.title} at ${j.company_name}.`,
+            description: j.description ? j.description.replace(/<[^>]+>/g, '\n').slice(0, 800) : `Detailed vacancy for ${j.title}.`,
+            requirements: [`Relevant professional experience in ${keyword}`],
+            responsibilities: [`Drive milestones for ${j.title}`],
+            skills: j.tags || [keyword, "Web"],
+            application_url: j.url,
+            source: "Arbeitnow",
+            relevance_score: relevance
+          });
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('Arbeitnow API fetch note:', e);
+  }
+
+  // 4. Web Gateways (at bottom)
   const gateways = [
     {
       id: `gw-indeed-${Date.now()}`,
@@ -1015,7 +1059,8 @@ async function clientFetchOpenJobs(keyword, countries, time) {
       responsibilities: ["Develop and maintain systems and products"],
       skills: [keyword, "Industry Standards"],
       application_url: isMY ? `https://malaysia.indeed.com/jobs?q=${encodeURIComponent(keyword)}` : `https://www.indeed.com/jobs?q=${encodeURIComponent(keyword)}&l=${encodeURIComponent(primaryCountry)}`,
-      source: "Web"
+      source: "Web",
+      relevance_score: 50
     },
     {
       id: `gw-google-${Date.now()}`,
@@ -1035,14 +1080,12 @@ async function clientFetchOpenJobs(keyword, countries, time) {
       responsibilities: ["Execute domain objectives"],
       skills: [keyword, "Google Jobs Feed"],
       application_url: `https://www.google.com/search?q=${encodeURIComponent(keyword + ' jobs in ' + primaryCountry)}&ibp=htl;jobs`,
-      source: "Web"
+      source: "Web",
+      relevance_score: 50
     }
   ];
 
-  gateways.forEach(g => { g.relevance_score = 90; });
-  const combined = [...jobs, ...gateways];
-  combined.sort((a, b) => (b.relevance_score || 50) - (a.relevance_score || 50));
-  return combined;
+  return [...primaryJobs, ...secondaryJobs, ...gateways];
 }
 
 // ============================================================================

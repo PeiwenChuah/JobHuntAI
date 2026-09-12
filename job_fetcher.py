@@ -135,6 +135,54 @@ def is_fuzzy_word_match(w1, w2):
             return True
     return False
 
+ROLE_CLUSTERS = [
+    # AI, Data Science & Machine Learning
+    {'data scientist', 'data science', 'ai scientist', 'ai engineer', 'artificial intelligence', 'machine learning', 'machine learning engineer', 'ml engineer', 'applied scientist', 'research scientist', 'statistician', 'deep learning', 'nlp', 'computer vision', 'algorithm', 'genai', 'llm engineer', 'ai specialist', 'ai researcher'},
+
+    # Software Engineering & Development
+    {'software engineer', 'software developer', 'full stack', 'backend', 'frontend', 'programmer', 'software architecture', 'web developer', 'systems engineer', 'mobile developer', 'ios', 'android', 'cloud engineer', 'embedded engineer', 'firmware engineer', 'application developer'},
+
+    # Product & Project Management
+    {'product manager', 'product owner', 'product lead', 'head of product', 'associate product manager', 'group product manager', 'vp product', 'technical product manager', 'project manager', 'scrum master', 'program manager'},
+
+    # Data Analytics & Business Intelligence
+    {'data analyst', 'business intelligence', 'bi analyst', 'analytics', 'data reporting', 'insights analyst', 'data visualization', 'analytics engineer', 'bi developer', 'business analyst'},
+
+    # Data Engineering & Infrastructure
+    {'data engineer', 'big data', 'etl', 'data warehouse', 'data platform', 'database engineer', 'data pipeline', 'database administrator', 'dba'},
+
+    # DevOps & Cloud Infrastructure
+    {'devops engineer', 'site reliability', 'sre', 'platform engineer', 'infrastructure engineer', 'cloud architect', 'devsecops', 'ci cd', 'cloud engineer', 'systems administrator', 'sysadmin'},
+
+    # Chemical & Process Engineering
+    {'chemical engineer', 'chemical engineering', 'process engineer', 'process engineering', 'polymer engineer', 'materials engineer', 'refinery engineer', 'chemist', 'petrochemical', 'polymer'},
+
+    # Mechanical & Maintenance Engineering
+    {'mechanical engineer', 'mechanical engineering', 'hvac engineer', 'tooling engineer', 'maintenance engineer', 'equipment engineer', 'manufacturing engineer', 'piping engineer', 'cad designer'},
+
+    # Civil & Construction Engineering
+    {'civil engineer', 'civil engineering', 'structural engineer', 'site engineer', 'construction engineer', 'geotechnical engineer', 'c&s engineer', 'project engineer'},
+
+    # Electrical & Electronics Engineering
+    {'electrical engineer', 'electrical engineering', 'electronic engineer', 'electronics engineer', 'power engineer', 'pcb engineer', 'hardware engineer', 'instrumentation engineer', 'control engineer'},
+
+    # Accounting & Finance
+    {'accountant', 'accounting', 'auditor', 'audit', 'financial analyst', 'tax', 'accounts executive', 'bookkeeper', 'finance executive', 'finance manager', 'controller'},
+
+    # Human Resources
+    {'human resources', 'hr executive', 'hr manager', 'talent acquisition', 'recruiter', 'recruitment', 'people operations', 'hr generalist', 'hr specialist'},
+
+    # Marketing & Sales
+    {'marketing specialist', 'marketing executive', 'digital marketing', 'growth marketing', 'seo specialist', 'content creator', 'sales manager', 'sales executive', 'business development', 'account manager'}
+]
+
+GENERIC_ROLE_WORDS = {
+    'engineer', 'developer', 'specialist', 'manager', 'analyst', 
+    'scientist', 'executive', 'officer', 'associate', 'consultant', 
+    'lead', 'intern', 'assistant', 'director', 'technician',
+    'senior', 'junior', 'staff', 'principal', 'head'
+}
+
 def compute_job_relevance(title, query):
     """
     Computes a relevance score (0-100) between title and search query.
@@ -161,36 +209,29 @@ def compute_job_relevance(title, query):
     if all_present:
         return 95
 
-    # 3. Domain synonyms
-    domain_synonyms = {
-        'data scientist': ['data science', 'machine learning', 'ml', 'ai scientist', 'ai engineer', 'machine learning engineer', 'ml engineer', 'applied scientist', 'research scientist', 'statistician', 'deep learning', 'nlp', 'computer vision', 'algorithm', 'artificial intelligence', 'genai', 'llm engineer'],
-        'software engineer': ['software developer', 'full stack', 'backend', 'frontend', 'programmer', 'software architecture', 'web developer', 'systems engineer', 'mobile developer', 'ios', 'android', 'cloud engineer', 'embedded engineer', 'firmware engineer'],
-        'product manager': ['product owner', 'product lead', 'head of product', 'associate product manager', 'group product manager', 'vp product', 'technical product manager'],
-        'data analyst': ['business intelligence', 'bi analyst', 'analytics', 'data reporting', 'insights analyst', 'data visualization', 'analytics engineer', 'bi developer'],
-        'data engineer': ['big data', 'etl', 'data warehouse', 'data platform', 'analytics engineer', 'database engineer', 'data pipeline'],
-        'devops engineer': ['site reliability', 'sre', 'platform engineer', 'infrastructure engineer', 'cloud engineer', 'devsecops', 'ci cd'],
-        'accountant': ['accounting', 'auditor', 'audit', 'financial analyst', 'tax', 'accounts executive', 'bookkeeper', 'finance executive']
-    }
-    for key, syns in domain_synonyms.items():
-        if key in q_clean or key in raw_clean:
-            for syn in syns:
-                if syn in t_clean:
-                    return 85
+    # 3. Bidirectional Cluster Matching (e.g. AI Scientist matches Data Scientist, ML Engineer, etc.)
+    for cluster in ROLE_CLUSTERS:
+        q_matches = any(term in q_clean or term in raw_clean for term in cluster)
+        t_matches = any(term in t_clean for term in cluster)
+        if q_matches and t_matches:
+            return 88
 
     # 4. Fuzzy token overlap calculation
-    matched = sum(1 for qw in q_words if any(is_fuzzy_word_match(qw, tw) for tw in t_words))
-    ratio = matched / len(q_words)
+    matched_qwords = [qw for qw in q_words if any(is_fuzzy_word_match(qw, tw) for tw in t_words)]
+    ratio = len(matched_qwords) / len(q_words)
 
-    if len(q_words) > 1:
-        if ratio < 0.75:
-            return 0
-    else:
-        if ratio >= 1.0 or any(is_fuzzy_word_match(q_words[0], tw) for tw in t_words):
-            return 80
-        else:
-            return 0
+    # Discard false positives if only generic words matched and domain-specific words failed
+    if len(q_words) > 1 and all(w in GENERIC_ROLE_WORDS for w in matched_qwords):
+        return 0
 
-    return int(ratio * 70)
+    if ratio >= 1.0:
+        return 90
+    elif ratio >= 0.5:
+        return int(55 + ratio * 25)
+    elif len(q_words) == 1 and len(matched_qwords) == 1:
+        return 80
+
+    return int(ratio * 40)
 
 def search_live_jobs(query="Software Engineer", countries=None, time_filter="any", source_filter=None):
     """
@@ -259,19 +300,36 @@ def search_live_jobs(query="Software Engineer", countries=None, time_filter="any
                 if "relevance_score" not in j:
                     j["relevance_score"] = compute_job_relevance(j.get("title", ""), query)
 
-        max_count = max(len(js_list), len(li_list), len(rem_list), len(arb_list), 1)
-        for i in range(max_count):
-            if i < len(js_list):
-                all_jobs.append(js_list[i])
-            if i < len(li_list):
-                all_jobs.append(li_list[i])
-            if i < len(rem_list):
-                all_jobs.append(rem_list[i])
-            if i < len(arb_list):
-                all_jobs.append(arb_list[i])
+        # Sort each source group by relevance score
+        js_list.sort(key=lambda x: x.get("relevance_score", 50), reverse=True)
+        li_list.sort(key=lambda x: x.get("relevance_score", 50), reverse=True)
+        rem_list.sort(key=lambda x: x.get("relevance_score", 50), reverse=True)
+        arb_list.sort(key=lambda x: x.get("relevance_score", 50), reverse=True)
 
-        # Rank all live jobs by relevance score
-        all_jobs.sort(key=lambda x: x.get("relevance_score", 50), reverse=True)
+        # 1. TOP PRIORITY: Interleave LinkedIn and JobStreet postings first
+        primary_jobs = []
+        max_primary = max(len(li_list), len(js_list), 1)
+        for i in range(max_primary):
+            if i < len(li_list):
+                primary_jobs.append(li_list[i])
+            if i < len(js_list):
+                primary_jobs.append(js_list[i])
+
+        # Rank primary jobs by relevance score
+        primary_jobs.sort(key=lambda x: x.get("relevance_score", 50), reverse=True)
+        all_jobs.extend(primary_jobs)
+
+        # 2. SECONDARY: Other web boards (Remotive, Arbeitnow)
+        secondary_jobs = []
+        max_sec = max(len(rem_list), len(arb_list), 1)
+        for i in range(max_sec):
+            if i < len(rem_list):
+                secondary_jobs.append(rem_list[i])
+            if i < len(arb_list):
+                secondary_jobs.append(arb_list[i])
+
+        secondary_jobs.sort(key=lambda x: x.get("relevance_score", 50), reverse=True)
+        all_jobs.extend(secondary_jobs)
 
         # 5. Add verified gateway search cards for comprehensive discovery
         primary_country = countries[0]
@@ -555,9 +613,9 @@ def fetch_linkedin_live(query="Software Engineer", location="Malaysia", time_fil
         with urllib.request.urlopen(req, timeout=6) as response:
             page_html = response.read().decode("utf-8")
 
-            card_chunks = re.findall(r'<div class="base-card[^"]*"[^>]*>(.*?)</div>\s*</li>', page_html, re.DOTALL)
+            card_chunks = re.findall(r'<li[^>]*>(.*?)</li>', page_html, re.DOTALL)
             if not card_chunks:
-                card_chunks = re.findall(r'<li[^>]*>(.*?)</li>', page_html, re.DOTALL)
+                card_chunks = re.findall(r'<div class="base-card[^"]*"[^>]*>(.*?)</div>\s*</li>', page_html, re.DOTALL)
 
             for chunk in card_chunks:
                 title_m = re.search(r'<h3[^>]*class="[^"]*base-search-card__title[^"]*"[^>]*>\s*([^<]+)\s*</h3>', chunk)
@@ -576,9 +634,17 @@ def fetch_linkedin_live(query="Software Engineer", location="Malaysia", time_fil
                 raw_company = html.unescape(company_m.group(1).strip()) if company_m else "Company"
                 raw_loc = html.unescape(loc_m.group(1).strip()) if loc_m else location
                 raw_link_val = html.unescape(link_m.group(1).strip())
-                id_m = re.search(r'(\d{8,12})', raw_link_val)
-                if id_m:
-                    raw_link = f"https://www.linkedin.com/jobs/view/{id_m.group(1)}/"
+
+                # Robust Job ID extraction via official entity URN, falling back to permalink regex
+                urn_m = re.search(r'data-entity-urn="urn:li:jobPosting:(\d+)"', chunk)
+                if urn_m:
+                    job_id = urn_m.group(1)
+                else:
+                    id_m = re.search(r'/jobs/view/(?:[^\?]+/)?(?:[a-zA-Z0-9\-_]*-)?(\d+)', raw_link_val) or re.search(r'(\d{8,12})', raw_link_val)
+                    job_id = id_m.group(1) if id_m else None
+
+                if job_id:
+                    raw_link = f"https://www.linkedin.com/jobs/view/{job_id}/"
                 else:
                     raw_link = raw_link_val.split("?")[0].strip()
                 posted_date = time_m.group(1).strip() if time_m else datetime.now().strftime("%Y-%m-%d")
@@ -591,6 +657,7 @@ def fetch_linkedin_live(query="Software Engineer", location="Malaysia", time_fil
                 skills = extract_skills_from_title(raw_title, query)
 
                 jobs.append({
+                    "id": f"li-{job_id}" if job_id else f"li-{abs(hash(raw_link))}",
                     "title": raw_title,
                     "company": raw_company,
                     "company_country": country,

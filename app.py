@@ -17,7 +17,7 @@ import database
 import ai_engine
 import job_fetcher
 
-PORT = int(os.environ.get("PORT", 8000))
+PORT = int(os.environ.get("PORT", 5000))
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 class JobHuntRequestHandler(http.server.BaseHTTPRequestHandler):
