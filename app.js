@@ -140,26 +140,34 @@ async function detectBackendStatus() {
     urlInput.value = backendConfig.customUrl;
   }
 
-  let probeUrl = '';
+  const probeUrls = [];
   if (backendConfig.customUrl) {
-    probeUrl = backendConfig.customUrl.replace(/\/+$/, '');
-  } else if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('github.io')) {
-    probeUrl = window.location.origin;
+    probeUrls.push(backendConfig.customUrl.replace(/\/+$/, ''));
+  }
+  if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('github.io')) {
+    probeUrls.push(window.location.origin);
+  }
+  // If hosted on GitHub Pages or local file, probe localhost:5000 in case user is running python3 app.py
+  if (window.location.hostname.includes('github.io') || window.location.protocol === 'file:') {
+    probeUrls.push('http://localhost:5000');
+    probeUrls.push('http://127.0.0.1:5000');
   }
 
   let connected = false;
-  if (probeUrl) {
+  for (const pUrl of probeUrls) {
+    if (!pUrl) continue;
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-      const res = await fetch(`${probeUrl}/api/stats`, { signal: controller.signal });
+      const timeoutId = setTimeout(() => controller.abort(), 1800);
+      const res = await fetch(`${pUrl}/api/stats`, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         connected = true;
-        backendConfig.activeUrl = probeUrl;
+        backendConfig.activeUrl = pUrl;
+        break;
       }
     } catch (e) {
-      connected = false;
+      // Continue to next probe
     }
   }
 
@@ -888,7 +896,7 @@ async function clientFetchOpenJobs(keyword, countries, time) {
 
   const isMY = primaryCountry.toLowerCase().includes('malaysia');
   const isSG = primaryCountry.toLowerCase().includes('singapore');
-  const jobStreetDomain = isSG ? 'https://www.jobstreet.com.sg' : 'https://www.jobstreet.com.my';
+  const jobStreetHost = isSG ? 'https://sg.jobstreet.com' : 'https://my.jobstreet.com';
 
   const normKeyword = normalizeQuery(keyword);
   const displayRole = normKeyword.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -937,7 +945,7 @@ async function clientFetchOpenJobs(keyword, countries, time) {
         "Work with multi-functional teams across product and engineering"
       ],
       skills: [displayRole, tier.company, "LinkedIn Verified", primaryCountry],
-      application_url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(fullTitle)}&location=${encLoc}`,
+      application_url: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(fullTitle + ' ' + tier.company)}&location=${encLoc}`,
       source: "LinkedIn",
       relevance_score: tier.score
     });
@@ -982,7 +990,7 @@ async function clientFetchOpenJobs(keyword, countries, time) {
         "Collaborate effectively with cross-department engineering teams"
       ],
       skills: [displayRole, tier.company, "JobStreet Verified", primaryCountry],
-      application_url: `${jobStreetDomain}/jobs?keywords=${encodeURIComponent(fullTitle)}`,
+      application_url: `${jobStreetHost}/jobs?keywords=${encodeURIComponent(fullTitle + ' ' + tier.company)}`,
       source: "JobStreet",
       relevance_score: tier.score
     });

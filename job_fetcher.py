@@ -309,7 +309,7 @@ def search_live_jobs(query="Software Engineer", countries=None, time_filter="any
         # JobStreet verified search gateway
         is_my = 'malaysia' in primary_country.lower()
         is_sg = 'singapore' in primary_country.lower()
-        js_url = f"https://www.jobstreet.com.my/jobs?q={enc_norm_q}" if is_my else (f"https://www.jobstreet.com.sg/jobs?q={enc_norm_q}" if is_sg else f"https://my.jobstreet.com/jobs?q={enc_norm_q}")
+        js_url = f"https://my.jobstreet.com/jobs?keywords={enc_norm_q}" if is_my else (f"https://sg.jobstreet.com/jobs?keywords={enc_norm_q}" if is_sg else f"https://my.jobstreet.com/jobs?keywords={enc_norm_q}")
 
         all_jobs.append({
             "title": f"Browse All '{display_role}' Listings on JobStreet ({primary_country})",
@@ -486,7 +486,7 @@ def fetch_jobstreet_live(query="Software Engineer", market=None, location="Malay
                     if sub_desc and sub_desc not in skills:
                         skills.append(sub_desc)
 
-                apply_url = f"https://www.{display_domain}/job/{job_id}"
+                apply_url = f"{api_host}/job/{job_id}"
 
                 jobs.append({
                     "title": raw_title,
@@ -575,7 +575,12 @@ def fetch_linkedin_live(query="Software Engineer", location="Malaysia", time_fil
                     continue
                 raw_company = html.unescape(company_m.group(1).strip()) if company_m else "Company"
                 raw_loc = html.unescape(loc_m.group(1).strip()) if loc_m else location
-                raw_link = link_m.group(1).split("?")[0].strip()
+                raw_link_val = html.unescape(link_m.group(1).strip())
+                id_m = re.search(r'(\d{8,12})', raw_link_val)
+                if id_m:
+                    raw_link = f"https://www.linkedin.com/jobs/view/{id_m.group(1)}/"
+                else:
+                    raw_link = raw_link_val.split("?")[0].strip()
                 posted_date = time_m.group(1).strip() if time_m else datetime.now().strftime("%Y-%m-%d")
 
                 country = infer_country_from_location(raw_loc, default_country=location)
