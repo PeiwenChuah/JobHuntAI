@@ -819,7 +819,7 @@ function renderLiveJobsGrid() {
             ${applyText} ↗
           </a>
           <div class="card-quick-actions">
-            <button class="btn btn-sm btn-outline live-view-btn" data-idx="${idx}">Details</button>
+            <button class="btn btn-sm btn-outline live-view-btn" data-idx="${idx}">👁️ Details</button>
             <button class="btn btn-sm btn-outline live-cl-btn" data-idx="${idx}" title="Generate tailored Cover Letter">📝 Letter</button>
             <button class="btn btn-sm btn-outline live-prep-btn" data-idx="${idx}" title="Generate Interview Questions">🎯 Prep</button>
           </div>
